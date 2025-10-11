@@ -24,8 +24,7 @@ func (c *ControllerV1) Upload(ctx context.Context, req *v1.UploadReq) (res *v1.U
 			ctx,
 			"https://openspeech.bytedance.com/api/v3/auc/lark/submit",
 			req,
-		); 
-		
+		)
 	if resVar.IsEmpty() {
 		return nil, gerror.Wrap(err, "提交任务失败")
 	} 

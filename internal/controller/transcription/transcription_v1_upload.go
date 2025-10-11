@@ -7,13 +7,12 @@ import (
 
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
-	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/google/uuid"
 )
 
 func (c *ControllerV1) Upload(ctx context.Context, req *v1.UploadReq) (res *v1.UploadRes, err error) {
 	requestId := uuid.New().String()
-	client, err := g.Client().ContentJson().
+	resVar := g.Client().ContentJson().
 		SetHeaderMap(g.MapStrStr{
 			"X-Api-App-Key":     g.Cfg().MustGet(ctx, "volc-lark-minutes.appid").String(),
 			"X-Api-Access-Key":  g.Cfg().MustGet(ctx, "volc-lark-minutes.accessKey").String(),
@@ -21,20 +20,17 @@ func (c *ControllerV1) Upload(ctx context.Context, req *v1.UploadReq) (res *v1.U
 			"X-Api-Request-Id":  requestId,
 			"X-Api-Sequence":    "-1",
 		}).
-		Post(
+		PostVar(
 			ctx,
 			"https://openspeech.bytedance.com/api/v3/auc/lark/submit",
 			req,
-		)
-	if err != nil {
+		); 
+		
+	if resVar.IsEmpty() {
 		return nil, gerror.Wrap(err, "提交任务失败")
-	}
-	defer client.Close()
-
-	// client.RawDump()
-
-	if gconv.Struct(client.ReadAllString(), &res); err != nil || res.Data.TaskID == "" {
-		return nil, gerror.Wrap(err, "提交任务失败")
+	} 
+	if err = resVar.Scan(&res); err != nil || res.Data.TaskID == "" {
+		return nil, gerror.Wrap(err, "返回结果为空")
 	}
 	res.Data.RequestID = requestId
 	return

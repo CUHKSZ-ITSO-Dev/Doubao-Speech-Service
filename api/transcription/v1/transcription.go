@@ -52,3 +52,14 @@ type UploadRes struct {
 		TaskID string `v:"required" json:"TaskID" dc:"任务ID"`
 	} `json:"Data"`
 }
+
+type QueryReq struct {
+	g.Meta `path:"/query" tags:"Query" method:"get" summary:"Query a task"`
+	TaskID string `v:"required" dc:"任务ID"`
+}
+type QueryRes struct {
+	g.Meta `mime:"text/html" example:"string"`
+	Data   struct {
+		TaskID string `v:"required" json:"TaskID" dc:"任务ID"`
+	} `json:"Data"`
+}

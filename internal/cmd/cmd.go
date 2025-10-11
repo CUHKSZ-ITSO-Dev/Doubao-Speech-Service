@@ -7,7 +7,7 @@ import (
 	"github.com/gogf/gf/v2/net/ghttp"
 	"github.com/gogf/gf/v2/os/gcmd"
 
-	"doubao-speech-service/internal/controller/hello"
+	"doubao-speech-service/internal/controller/transcription"
 )
 
 var (
@@ -17,10 +17,9 @@ var (
 		Brief: "start http server",
 		Func: func(ctx context.Context, parser *gcmd.Parser) (err error) {
 			s := g.Server()
-			s.Group("/", func(group *ghttp.RouterGroup) {
-				group.Middleware(ghttp.MiddlewareHandlerResponse)
+			s.Group("/transcription", func(group *ghttp.RouterGroup) {
 				group.Bind(
-					hello.NewV1(),
+					transcription.NewV1(),
 				)
 			})
 			s.Run()

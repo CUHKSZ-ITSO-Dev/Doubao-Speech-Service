@@ -58,15 +58,5 @@ type QueryReq struct {
 	TaskID string `v:"required" dc:"任务ID"`
 }
 type QueryRes struct {
-	Data struct {
-		TaskID string `v:"required" json:"TaskID" dc:"任务ID"`
-		Status string
-		Result struct {
-			AudioTranscriptionFile    string `json:"AudioTranscriptionFile"`
-			ChapterFile               string `json:"ChapterFile"`
-			InformationExtractionFile string `json:"InformationExtractionFile"`
-			SummarizationFile         string `json:"SummarizationFile"`
-			TranslationFile           string `json:"TranslationFile"`
-		} `json:"Result"`
-	}
+	Status string `v:"required" json:"Status" dc:"任务状态"`
 }

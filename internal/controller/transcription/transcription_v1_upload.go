@@ -6,6 +6,7 @@ import (
 
 	v1 "doubao-speech-service/api/transcription/v1"
 	"doubao-speech-service/internal/consts"
+	"doubao-speech-service/internal/dao"
 	"doubao-speech-service/internal/service/transcription"
 
 	"github.com/gogf/gf/v2/errors/gerror"
@@ -47,6 +48,16 @@ func (c *ControllerV1) Upload(ctx context.Context, req *v1.UploadReq) (res *v1.U
 		return nil, gerror.Wrap(err, "返回结果格式化失败")
 	}
 	res.Data.RequestID = requestId
+
+	_, err = dao.Transcription.Ctx(ctx).Data(g.Map{
+		"task_id":       res.Data.TaskID,
+		"request_id":    requestId,
+		"upload_params": req,
+		"status":        "pending",
+	}).Insert()
+	if err != nil {
+		return nil, gerror.Wrap(err, "写入数据库失败")
+	}
 
 	go func() {
 		bgCtx := context.Background()

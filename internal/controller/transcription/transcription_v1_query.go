@@ -7,13 +7,15 @@ import (
 	"github.com/gogf/gf/v2/frame/g"
 
 	v1 "doubao-speech-service/api/transcription/v1"
-	"doubao-speech-service/internal/service/transcription"
+	"doubao-speech-service/internal/dao"
 )
 
 func (c *ControllerV1) Query(ctx context.Context, req *v1.QueryReq) (res *v1.QueryRes, err error) {
-	status, err := transcription.Query(ctx, req.TaskID, g.RequestFromCtx(ctx).GetHeader("X-Api-Request-Id"))
-	if err != nil {
-		return nil, gerror.Wrap(err, "调用查询服务失败")
+	if err = dao.Transcription.Ctx(ctx).
+		Where("task_id = ?", req.TaskID).
+		Where("request_id = ?", g.RequestFromCtx(ctx).GetHeader("X-Api-Request-Id")).
+		Scan(res); err != nil {
+		return nil, gerror.Wrap(err, "查询数据库失败")
 	}
-	return &v1.QueryRes{Status: status}, nil
+	return
 }

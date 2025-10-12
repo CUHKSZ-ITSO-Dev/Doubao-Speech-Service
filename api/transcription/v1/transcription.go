@@ -2,6 +2,8 @@ package v1
 
 import (
 	"github.com/gogf/gf/v2/frame/g"
+
+	"doubao-speech-service/internal/model/entity"
 )
 
 type UploadReq struct {
@@ -57,6 +59,4 @@ type QueryReq struct {
 	g.Meta `path:"/query" method:"post" summary:"任务查询"`
 	TaskID string `v:"required" dc:"任务ID"`
 }
-type QueryRes struct {
-	Status string `v:"required" json:"Status" dc:"任务状态"`
-}
+type QueryRes entity.Transcription

@@ -2,6 +2,8 @@ package transcription
 
 import (
 	"context"
+	"time"
+	
 	"doubao-speech-service/internal/consts"
 
 	"github.com/gogf/gf/v2/errors/gerror"
@@ -26,7 +28,7 @@ type QueryRes struct {
 }
 
 func Query(ctx context.Context, taskId string, requestId string) (string, error) {
-	r, err := g.Client().ContentJson().
+	r, err := g.Client().Timeout(5 * time.Second).ContentJson().
 		SetHeaderMap(g.MapStrStr{
 			"X-Api-App-Key":     g.Cfg().MustGet(ctx, "volc-lark-minutes.appid").String(),
 			"X-Api-Access-Key":  g.Cfg().MustGet(ctx, "volc-lark-minutes.accessKey").String(),

@@ -1,5 +1,5 @@
 // ==========================================================================
-// Code generated and maintained by GoFrame CLI tool. DO NOT EDIT. Created at 2025-10-12 13:10:28
+// Code generated and maintained by GoFrame CLI tool. DO NOT EDIT. Created at 2025-10-12 19:49:44
 // ==========================================================================
 
 package internal
@@ -31,7 +31,6 @@ type TranscriptionColumns struct {
 	InformationExtractionFile string //
 	SummarizationFile         string //
 	TranslationFile           string //
-	LastQueryAt               string //
 	UpdatedAt                 string //
 	CreatedAt                 string //
 }
@@ -48,7 +47,6 @@ var transcriptionColumns = TranscriptionColumns{
 	InformationExtractionFile: "information_extraction_file",
 	SummarizationFile:         "summarization_file",
 	TranslationFile:           "translation_file",
-	LastQueryAt:               "last_query_at",
 	UpdatedAt:                 "updated_at",
 	CreatedAt:                 "created_at",
 }

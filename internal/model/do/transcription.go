@@ -1,5 +1,5 @@
 // =================================================================================
-// Code generated and maintained by GoFrame CLI tool. DO NOT EDIT. Created at 2025-10-12 13:10:28
+// Code generated and maintained by GoFrame CLI tool. DO NOT EDIT. Created at 2025-10-12 19:49:44
 // =================================================================================
 
 package do
@@ -22,7 +22,6 @@ type Transcription struct {
 	InformationExtractionFile *gjson.Json //
 	SummarizationFile         *gjson.Json //
 	TranslationFile           *gjson.Json //
-	LastQueryAt               any         //
 	UpdatedAt                 any         //
 	CreatedAt                 any         //
 }

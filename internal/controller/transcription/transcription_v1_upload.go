@@ -19,8 +19,8 @@ func (c *ControllerV1) Upload(ctx context.Context, req *v1.UploadReq) (res *v1.U
 	requestId := uuid.New().String()
 	client, err := g.Client().ContentJson().
 		SetHeaderMap(g.MapStrStr{
-			"X-Api-App-Key":     g.Cfg().MustGet(ctx, "volc-lark-minutes.appid").String(),
-			"X-Api-Access-Key":  g.Cfg().MustGet(ctx, "volc-lark-minutes.accessKey").String(),
+			"X-Api-App-Key":     g.Cfg().MustGet(ctx, "volc.lark.appid").String(),
+			"X-Api-Access-Key":  g.Cfg().MustGet(ctx, "volc.lark.accessKey").String(),
 			"X-Api-Resource-Id": "volc.lark.minutes",
 			"X-Api-Request-Id":  requestId,
 			"X-Api-Sequence":    "-1",
@@ -60,19 +60,17 @@ func (c *ControllerV1) Upload(ctx context.Context, req *v1.UploadReq) (res *v1.U
 	}
 
 	go func() {
-		bgCtx := context.Background()
+		bgCtx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
+		defer cancel()
 		t := time.NewTicker(30 * time.Second)
 		defer t.Stop()
 
 		for range t.C {
 			status, err := transcription.Query(bgCtx, res.Data.TaskID, requestId)
-			if err != nil {
+			if err != nil || status == "running" || status == "pending" {
 				continue
 			}
-			if status != "running" {
-				// TODO - 写入数据库
-				return
-			}
+			break
 		}
 	}()
 

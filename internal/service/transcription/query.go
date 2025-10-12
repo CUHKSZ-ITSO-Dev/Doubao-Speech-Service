@@ -38,8 +38,8 @@ type FetchResult struct {
 func Query(ctx context.Context, taskId string, requestId string) (string, error) {
 	r, err := g.Client().Timeout(5*time.Second).ContentJson().
 		SetHeaderMap(g.MapStrStr{
-			"X-Api-App-Key":     g.Cfg().MustGet(ctx, "volc-lark-minutes.appid").String(),
-			"X-Api-Access-Key":  g.Cfg().MustGet(ctx, "volc-lark-minutes.accessKey").String(),
+			"X-Api-App-Key":     g.Cfg().MustGet(ctx, "volc.lark.appid").String(),
+			"X-Api-Access-Key":  g.Cfg().MustGet(ctx, "volc.lark.accessKey").String(),
 			"X-Api-Resource-Id": "volc.lark.minutes",
 			"X-Api-Request-Id":  requestId,
 			"X-Api-Sequence":    "-1",

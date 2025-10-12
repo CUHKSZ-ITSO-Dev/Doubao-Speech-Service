@@ -8,6 +8,7 @@ require (
 	github.com/glebarez/go-sqlite v1.22.0
 	github.com/gogf/gf/v2 v2.9.4
 	github.com/google/uuid v1.6.0
+	github.com/volcengine/ve-tos-golang-sdk/v2 v2.7.24
 )
 
 require (
@@ -36,6 +37,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.38.0 // indirect
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	golang.org/x/net v0.43.0 // indirect
+	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

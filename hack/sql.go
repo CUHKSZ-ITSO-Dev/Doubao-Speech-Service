@@ -28,6 +28,7 @@ func main() {
 			summarization_file JSON,
 			translation_file JSON,
 			last_query_at TEXT,
+			updated_at TEXT NOT NULL DEFAULT (datetime('now')),
 			created_at TEXT NOT NULL DEFAULT (datetime('now'))
 		);
 	`)

@@ -6,4 +6,6 @@ gfcli:
     dao:
       - link: "sqlite::@file(/Users/nickwilde/Repo/Doubao-Speech-Service/db.sqlite3)"
         descriptionTag: true
-        tableEx: sqlite_sequence
+        tablesEx: sqlite_sequence
+        withTime: true
+        gJsonSupport: true

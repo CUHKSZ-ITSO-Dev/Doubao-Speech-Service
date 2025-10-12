@@ -17,6 +17,10 @@ var (
 		Brief: "start http server",
 		Func: func(ctx context.Context, parser *gcmd.Parser) (err error) {
 			s := g.Server()
+			s.SetPort(g.Cfg().MustGet(ctx, "server.port").Int())
+			s.SetOpenApiPath(g.Cfg().MustGet(ctx, "server.openapiPath").String())
+			s.SetSwaggerPath(g.Cfg().MustGet(ctx, "server.swaggerPath").String())
+
 			s.Group("/transcription", func(group *ghttp.RouterGroup) {
 				group.Middleware(ghttp.MiddlewareHandlerResponse)
 				group.Bind(

@@ -10,7 +10,7 @@ type UploadReq struct {
 	g.Meta `path:"/upload" method:"post" summary:"任务创建"`
 	Input  struct {
 		Offline struct {
-			FileURL  string `json:"FileURL" v:"required" dc:"文件url 文件大小< 1G 时长2小时"`
+			FileURL  string `json:"FileURL" dc:"文件url 文件大小< 1G 时长2小时"`
 			FileType string `json:"FileType" v:"required|in:audio,video" dc:"文件类型，audio：音频，video：视频"`
 		} `json:"Offline" v:"required"`
 	} `json:"Input" v:"required"`

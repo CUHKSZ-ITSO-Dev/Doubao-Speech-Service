@@ -2,6 +2,7 @@ package v1
 
 import (
 	"github.com/gogf/gf/v2/frame/g"
+	"github.com/gogf/gf/v2/encoding/gjson"
 
 	"doubao-speech-service/internal/model/entity"
 )
@@ -49,10 +50,7 @@ type UploadReq struct {
 	} `json:"Params"`
 }
 type UploadRes struct {
-	Data struct {
-		TaskID    string `v:"required" json:"TaskID" dc:"任务ID"`
-		RequestID string `v:"required" json:"RequestID" dc:"请求ID"`
-	}
+	Result *gjson.Json `json:"Result" dc:"结果"`
 }
 
 type QueryReq struct {

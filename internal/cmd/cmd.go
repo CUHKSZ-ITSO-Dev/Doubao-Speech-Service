@@ -25,7 +25,7 @@ var (
 
 			oai := s.GetOpenApi()
 			oai.Config.CommonResponse = ghttp.DefaultHandlerResponse{}
-			oai.Config.CommonResponseDataField = "data"
+			oai.Config.CommonResponseDataField = "Data"
 			s.SetOpenApiPath(g.Cfg().MustGet(ctx, "server.openapiPath").String())
 			s.SetSwaggerPath(g.Cfg().MustGet(ctx, "server.swaggerPath").String())
 

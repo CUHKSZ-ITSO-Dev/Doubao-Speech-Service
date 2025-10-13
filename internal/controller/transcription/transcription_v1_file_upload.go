@@ -23,7 +23,7 @@ func (c *ControllerV1) FileUpload(ctx context.Context, req *v1.FileUploadReq) (r
 	// 获取上传的文件 - 支持多种方式
 	uploadFiles := g.RequestFromCtx(ctx).GetUploadFiles("files")
 	if uploadFiles == nil {
-		return nil, gerror.New("上传文件为空，请使用字段名'file'或'files'上传文件")
+		return nil, gerror.New("上传文件为空，请使用字段名'files'上传文件")
 	}
 
 	// 并发处理多个文件

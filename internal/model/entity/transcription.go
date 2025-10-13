@@ -1,5 +1,5 @@
 // =================================================================================
-// Code generated and maintained by GoFrame CLI tool. DO NOT EDIT. Created at 2025-10-13 18:37:05
+// Code generated and maintained by GoFrame CLI tool. DO NOT EDIT. Created at 2025-10-13 18:49:11
 // =================================================================================
 
 package entity
@@ -11,7 +11,7 @@ import (
 
 // Transcription is the golang structure for table transcription.
 type Transcription struct {
-	Id                        int         `json:"id"                        orm:"id"                          description:""` //
+	Id                        int64       `json:"id"                        orm:"id"                          description:""` //
 	TaskId                    string      `json:"taskId"                    orm:"task_id"                     description:""` //
 	RequestId                 string      `json:"requestId"                 orm:"request_id"                  description:""` //
 	Owner                     string      `json:"owner"                     orm:"owner"                       description:""` //

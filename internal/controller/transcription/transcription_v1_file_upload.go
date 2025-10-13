@@ -13,7 +13,6 @@ import (
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
-	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/google/uuid"
 	"github.com/volcengine/ve-tos-golang-sdk/v2/tos"
 	"github.com/volcengine/ve-tos-golang-sdk/v2/tos/enum"
@@ -160,7 +159,6 @@ func (c *ControllerV1) processFileUpload(ctx context.Context, file *ghttp.Upload
 			},
 		},
 		"status":     "uploaded", // 文件已上传，但任务未提交
-		"updated_at": gtime.Now(),
 	}).Where("request_id = ?", fileID).Update(); err != nil {
 		result.Error = gerror.Wrap(err, "数据库写入 TOS 下载地址失败")
 		return result

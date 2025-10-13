@@ -8,8 +8,7 @@ import (
 
 // 文件上传API（支持单文件和多文件）
 type FileUploadReq struct {
-	g.Meta `path:"/file/upload" method:"post" summary:"文件上传"`
-	// multipart/form-data. Key = files
+	g.Meta `path:"/file/upload" method:"post" summary:"文件上传" dc:"使用 multipart/form-data 方式上传（可批量，并行处理）。字段名是 files。"`
 }
 type FileUploadRes struct {
 	Files   []FileInfo  `json:"files" dc:"成功上传的文件列表"`

@@ -1,5 +1,5 @@
 // =================================================================================
-// Code generated and maintained by GoFrame CLI tool. DO NOT EDIT. Created at 2025-10-12 19:49:44
+// Code generated and maintained by GoFrame CLI tool. DO NOT EDIT. Created at 2025-10-13 18:11:34
 // =================================================================================
 
 package do
@@ -15,8 +15,10 @@ type Transcription struct {
 	Id                        any         //
 	TaskId                    any         //
 	RequestId                 any         //
-	UploadParams              *gjson.Json //
+	Owner                     any         //
+	FileInfo                  *gjson.Json //
 	Status                    any         //
+	TaskParams                *gjson.Json //
 	AudioTranscriptionFile    *gjson.Json //
 	ChapterFile               *gjson.Json //
 	InformationExtractionFile *gjson.Json //

@@ -20,6 +20,7 @@ var (
 			s.SetPort(g.Cfg().MustGet(ctx, "server.port").Int())
 			s.SetOpenApiPath(g.Cfg().MustGet(ctx, "server.openapiPath").String())
 			s.SetSwaggerPath(g.Cfg().MustGet(ctx, "server.swaggerPath").String())
+			s.SetClientMaxBodySize(1024 * 1024 * 1024)
 
 			s.Group("/transcription", func(group *ghttp.RouterGroup) {
 				group.Middleware(ghttp.MiddlewareHandlerResponse)

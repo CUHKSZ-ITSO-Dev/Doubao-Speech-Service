@@ -1,5 +1,5 @@
 // ==========================================================================
-// Code generated and maintained by GoFrame CLI tool. DO NOT EDIT. Created at 2025-10-12 19:49:44
+// Code generated and maintained by GoFrame CLI tool. DO NOT EDIT. Created at 2025-10-13 18:11:34
 // ==========================================================================
 
 package internal
@@ -24,8 +24,10 @@ type TranscriptionColumns struct {
 	Id                        string //
 	TaskId                    string //
 	RequestId                 string //
-	UploadParams              string //
+	Owner                     string //
+	FileInfo                  string //
 	Status                    string //
+	TaskParams                string //
 	AudioTranscriptionFile    string //
 	ChapterFile               string //
 	InformationExtractionFile string //
@@ -40,8 +42,10 @@ var transcriptionColumns = TranscriptionColumns{
 	Id:                        "id",
 	TaskId:                    "task_id",
 	RequestId:                 "request_id",
-	UploadParams:              "upload_params",
+	Owner:                     "owner",
+	FileInfo:                  "file_info",
 	Status:                    "status",
+	TaskParams:                "task_params",
 	AudioTranscriptionFile:    "audio_transcription_file",
 	ChapterFile:               "chapter_file",
 	InformationExtractionFile: "information_extraction_file",

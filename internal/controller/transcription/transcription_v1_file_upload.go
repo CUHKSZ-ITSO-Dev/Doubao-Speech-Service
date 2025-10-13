@@ -159,7 +159,7 @@ func (c *ControllerV1) processFileUpload(ctx context.Context, file *ghttp.Upload
 			},
 		},
 		"status":   "uploaded", // 文件已上传，但任务未提交
-	}).Insert(); err != nil {
+	}).Where("request_id", fileID).Update(); err != nil {
 		result.Error = gerror.Wrap(err, "数据库写入 TOS 下载地址失败")
 		return result
 	}

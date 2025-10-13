@@ -47,7 +47,9 @@ func Query(ctx context.Context, taskId string, requestId string) (string, error)
 		Post(
 			ctx,
 			"https://openspeech.bytedance.com/api/v3/auc/lark/query",
-			taskId,
+			g.Map{
+				"TaskID": taskId,
+			},
 		)
 	if err != nil {
 		return "", gerror.New("向第三方服务器发送查询请求失败")
@@ -103,11 +105,14 @@ func Query(ctx context.Context, taskId string, requestId string) (string, error)
 			close(results)
 		}()
 
-		updateData := map[string]*gjson.Json{}
+		updateData := g.Map{}
 		for res := range results {
 			updateData[res.Key] = res.Result
 		}
-		if _, err = dao.Transcription.Ctx(ctx).Data(updateData).Where("task_id = ? and request_id = ?", taskId, requestId).Update(); err != nil {
+		updateData["status"] = queryRes.Data.Status
+		if _, err = dao.Transcription.Ctx(ctx).
+			Data(updateData).
+			Where("task_id = ? and request_id = ?", taskId, requestId).Update(); err != nil {
 			return "", gerror.Wrap(err, "更新数据库失败")
 		}
 	}

@@ -1,6 +1,10 @@
 package consts
 
-import "github.com/gogf/gf/v2/frame/g"
+import (
+	"context"
+
+	"github.com/gogf/gf/v2/frame/g"
+)
 
 var (
 	errMsg = g.MapStrStr{
@@ -34,9 +38,10 @@ const (
 	MaxUploadSize = 1024 * 1024 * 1024 // 1GB
 )
 
-func GetErrMsg(code string) string {
+func GetErrMsg(ctx context.Context, code string) string {
 	msg, ok := errMsg[code]
-	if !ok && code[:2] == "550" {
+	g.Log().Info(ctx, "errMsg = "+code)
+	if !ok && len(code) >= 2 && code[:2] == "55" {
 		msg = errMsg["550xxxxx"]
 	}
 	return msg

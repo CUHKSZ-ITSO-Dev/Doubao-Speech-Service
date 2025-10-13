@@ -72,7 +72,7 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 		return nil, gerror.Newf(
 			"第三方服务通知任务提交失败。错误码：%s，错误信息：%s。Logid：%s",
 			response.Response.Header.Get("X-Api-Error-Message"),
-			consts.GetErrMsg(response.Response.Header.Get("X-Api-Error-Message")),
+			consts.GetErrMsg(ctx, response.Response.Header.Get("X-Api-Error-Message")),
 			response.Response.Header.Get("X-Tt-Logid"),
 		)
 	}

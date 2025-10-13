@@ -58,7 +58,7 @@ func Query(ctx context.Context, taskId string, requestId string) (string, error)
 		return "", gerror.Newf(
 			"第三方服务通知任务处理失败。错误码：%s，错误信息：%s。Logid：%s",
 			r.Response.Header.Get("X-Api-Error-Message"),
-			consts.GetErrMsg(r.Response.Header.Get("X-Api-Error-Message")),
+			consts.GetErrMsg(ctx, r.Response.Header.Get("X-Api-Error-Message")),
 			r.Response.Header.Get("X-Tt-Logid"),
 		)
 	}
@@ -112,5 +112,6 @@ func Query(ctx context.Context, taskId string, requestId string) (string, error)
 		}
 	}
 
+	g.Log().Infof(ctx, "[%s] 任务 %s 查询结果：%s", requestId, taskId, queryRes.Data.Status)
 	return queryRes.Data.Status, nil
 }

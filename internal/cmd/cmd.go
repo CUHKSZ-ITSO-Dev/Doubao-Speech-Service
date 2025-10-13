@@ -8,6 +8,7 @@ import (
 	"github.com/gogf/gf/v2/os/gcmd"
 
 	"doubao-speech-service/internal/controller/transcription"
+	transcriptionSvc "doubao-speech-service/internal/service/transcription"
 )
 
 var (
@@ -32,6 +33,9 @@ var (
 					transcription.NewV1(),
 				)
 			})
+
+			go transcriptionSvc.Recover(ctx)
+
 			s.Run()
 			return nil
 		},

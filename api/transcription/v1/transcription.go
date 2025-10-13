@@ -33,7 +33,7 @@ type FileError struct {
 // 任务提交API
 type TaskSubmitReq struct {
 	g.Meta `path:"/task/submit" method:"post" summary:"任务提交"`
-	FileID string `json:"FileID" v:"required" dc:"文件ID，通过文件上传API获得"`
+	FileID string           `json:"FileID" v:"required" dc:"文件ID，通过文件上传API获得"`
 	Params TaskSubmitParams `json:"Params" v:"required" dc:"任务参数"`
 }
 type TaskSubmitRes struct {
@@ -74,8 +74,8 @@ type TaskSubmitParams struct {
 	ChapterEnabled bool `json:"ChapterEnabled" dc:"是否开启章节总结"`
 }
 
-type QueryReq struct {
-	g.Meta `path:"/query" method:"post" summary:"任务查询"`
+type ListReq struct {
+	g.Meta `path:"/list" method:"post" summary:"任务查询"`
 	Owner  string `v:"required" dc:"所有者"`
 }
-type QueryRes []entity.Transcription
+type ListRes []entity.Transcription

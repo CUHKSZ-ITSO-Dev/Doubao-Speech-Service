@@ -9,8 +9,8 @@ import (
 	"doubao-speech-service/internal/dao"
 )
 
-func (c *ControllerV1) Query(ctx context.Context, req *v1.QueryReq) (res *v1.QueryRes, err error) {
-	res = &v1.QueryRes{}
+func (c *ControllerV1) List(ctx context.Context, req *v1.ListReq) (res *v1.ListRes, err error) {
+	res = &v1.ListRes{}
 	if err = dao.Transcription.Ctx(ctx).
 		Where("owner = ?", req.Owner).
 		Scan(res); err != nil {

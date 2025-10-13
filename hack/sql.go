@@ -18,7 +18,7 @@ func main() {
 	_, _ = db.Query(`
 		CREATE TABLE IF NOT EXISTS transcription (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			task_id TEXT NOT NULL,
+			task_id TEXT,
 			request_id TEXT NOT NULL,
 			owner TEXT NOT NULL,
 			file_info JSON,

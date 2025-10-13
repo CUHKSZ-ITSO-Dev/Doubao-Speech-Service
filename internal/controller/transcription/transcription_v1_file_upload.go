@@ -95,7 +95,6 @@ func (c *ControllerV1) processFileUpload(ctx context.Context, file *ghttp.Upload
 	defer fileReader.Close()
 
 	// 生成文件ID和验证文件类型
-	fileID := uuid.New().String()
 	mType, err := mimetype.DetectReader(fileReader)
 	if err != nil {
 		result.Error = gerror.Wrap(err, "检测文件类型失败")
@@ -108,15 +107,19 @@ func (c *ControllerV1) processFileUpload(ctx context.Context, file *ghttp.Upload
 	}
 
 	// 文件校验成功，进入 pending 状态
+	fileID := uuid.New().String()
 	if _, err := dao.Transcription.Ctx(ctx).Data(g.Map{
 		"request_id": fileID,
 		"owner":      upn,
-		"filename":   file.Filename,
-		"file_type":  mType.Extension(),
-		"file_size":  file.Size,
+		"file_info":  g.Map{
+			"object_key": fileID + "/" + file.Filename,
+			"filename":   file.Filename,
+			"file_type":  mType.Extension(),
+			"file_size":  file.Size,
+		},
 		"status":     "pending",
 	}).Insert(); err != nil {
-		result.Error = gerror.Wrap(err, "数据库 pending 记录写入失败")
+		result.Error = gerror.Wrap(err, "数据库新建记录失败")
 		return result
 	}
 
@@ -146,12 +149,18 @@ func (c *ControllerV1) processFileUpload(ctx context.Context, file *ghttp.Upload
 	}
 
 	// 保存文件记录到数据库
-	_, err = dao.Transcription.Ctx(ctx).Data(g.Map{
-		"file_url": url.SignedUrl,
+	if _, err = dao.Transcription.Ctx(ctx).Data(g.Map{
+		"task_params": g.Map{
+			"Input": g.Map{
+				"Offline": g.Map{
+					"FileURL": url.SignedUrl,
+					"FileType": consts.TranscriptionExt[mType.Extension()],
+				},
+			},
+		},
 		"status":   "uploaded", // 文件已上传，但任务未提交
-	}).Insert()
-	if err != nil {
-		result.Error = gerror.Wrap(err, "保存文件记录失败")
+	}).Insert(); err != nil {
+		result.Error = gerror.Wrap(err, "数据库写入 TOS 下载地址失败")
 		return result
 	}
 

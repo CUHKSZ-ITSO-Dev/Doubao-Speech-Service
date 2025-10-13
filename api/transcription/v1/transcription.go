@@ -34,7 +34,7 @@ type FileError struct {
 type TaskSubmitReq struct {
 	g.Meta `path:"/task/submit" method:"post" summary:"任务提交"`
 
-	FileID string `json:"file_id" v:"required" dc:"文件ID，通过文件上传API获得"`
+	FileID string `json:"FileID" v:"required" dc:"文件ID，通过文件上传API获得"`
 
 	Params struct {
 		AllActivate bool   `json:"AllActivate" v:"required" dc:"是否打包计费。[非全功能使用，具体功能需设置设对应功能属性为true]"`
@@ -77,6 +77,6 @@ type TaskSubmitRes struct {
 
 type QueryReq struct {
 	g.Meta `path:"/query" method:"post" summary:"任务查询"`
-	TaskID string `v:"required" dc:"任务ID"`
+	Owner string `v:"required" dc:"所有者"`
 }
 type QueryRes entity.Transcription

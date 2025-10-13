@@ -12,27 +12,23 @@ import (
 	"github.com/gogf/gf/v2/encoding/gjson"
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
-	"github.com/google/uuid"
 )
 
 // TaskSubmit 任务提交接口
 func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (res *v1.TaskSubmitRes, err error) {
 	// 验证文件ID是否存在
-	fileInfo, err := dao.Transcription.Ctx(ctx).Where("request_id", req.FileID).One()
+	transcriptionRecord, err := dao.Transcription.Ctx(ctx).Where("request_id", req.FileID).One()
 	if err != nil {
 		return nil, gerror.Wrap(err, "查询文件信息失败")
 	}
-	if fileInfo.IsEmpty() {
+	if transcriptionRecord.IsEmpty() {
 		return nil, gerror.New("文件ID不存在，请先上传文件")
 	}
 
 	// 检查文件状态
-	if fileInfo["status"].String() != "uploaded" {
-		return nil, gerror.New("文件状态异常，无法提交任务")
+	if transcriptionRecord["status"].String() != "uploaded" {
+		return nil, gerror.Newf("文件状态异常，无法提交任务。当前状态：%s", transcriptionRecord["status"].String())
 	}
-
-	// 生成新的任务ID
-	requestId := uuid.New().String()
 
 	// 构建提交给第三方API的请求
 	submitReq := struct {
@@ -45,8 +41,9 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 		Params v1.TaskSubmitReq `json:"Params"`
 	}{}
 
-	submitReq.Input.Offline.FileURL = fileInfo["file_url"].String()
-	submitReq.Input.Offline.FileType = consts.TranscriptionExt[fileInfo["file_type"].String()]
+	if err = transcriptionRecord["task_params"].Struct(&submitReq); err != nil {
+		return nil, gerror.Wrap(err, "解析数据库任务参数失败")
+	}
 	submitReq.Params = *req
 
 	// 提交任务到第三方API
@@ -56,7 +53,7 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 			"X-Api-App-Key":     g.Cfg().MustGet(ctx, "volc.lark.appid").String(),
 			"X-Api-Access-Key":  g.Cfg().MustGet(ctx, "volc.lark.accessKey").String(),
 			"X-Api-Resource-Id": "volc.lark.minutes",
-			"X-Api-Request-Id":  requestId,
+			"X-Api-Request-Id":  transcriptionRecord["request_id"].String(),
 			"X-Api-Sequence":    "-1",
 		}).
 		Post(
@@ -72,7 +69,7 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 	// 解析响应
 	if response.Response.Header.Get("X-Api-Message") != "OK" {
 		return nil, gerror.Newf(
-			"第三方服务通知任务处理失败。错误码：%s，错误信息：%s。Logid：%s",
+			"第三方服务通知任务提交失败。错误码：%s，错误信息：%s。Logid：%s",
 			response.Response.Header.Get("X-Api-Error-Message"),
 			consts.GetErrMsg(response.Response.Header.Get("X-Api-Error-Message")),
 			response.Response.Header.Get("X-Tt-Logid"),
@@ -85,9 +82,9 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 	_, err = dao.Transcription.Ctx(ctx).
 		Where("request_id", req.FileID).
 		Data(g.Map{
-			"task_id":       taskID,
-			"upload_params": req,
-			"status":        "pending",
+			"task_id":     taskID,
+			"task_params": submitReq,
+			"status":      "pending",
 		}).Update()
 	if err != nil {
 		return nil, gerror.Wrap(err, "更新任务记录失败")
@@ -107,11 +104,11 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 			}
 			break
 		}
-	}(taskID, requestId)
+	}(taskID, transcriptionRecord["request_id"].String())
 
 	return &v1.TaskSubmitRes{
 		TaskID:    taskID,
-		RequestID: requestId,
+		RequestID: transcriptionRecord["request_id"].String(),
 		Status:    "pending",
 	}, nil
 }

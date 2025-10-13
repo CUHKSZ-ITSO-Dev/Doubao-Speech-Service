@@ -103,6 +103,7 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 			if err != nil || status == "running" || status == "pending" {
 				continue
 			}
+			g.Log().Infof(bgCtx, "[%s] 任务 %s 提交结束。最终状态：%s", reqID, taskID, status)
 			break
 		}
 	}(taskID, transcriptionRecord["request_id"].String())

@@ -11,8 +11,9 @@ gfcli:
   
   build:
     name: doubao-speech-service
-    arch: amd64,arm
-    system: linux,darwin,windows
+    path: ./bin
+    arch: "amd64,arm64"
+    system: "darwin,linux,windows"
     packSrc: manifest/config
     packDst: internal/packed/config.go
     version: 1.0.0

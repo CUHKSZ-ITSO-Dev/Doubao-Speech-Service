@@ -14,6 +14,24 @@ var (
 		"550xxxxx": "服务内部处理错误",
 		"55000031": "服务器繁忙，服务过载，无法处理当前请求。",
 	}
+
+	TranscriptionExt = g.MapStrStr{
+		".mp4":  "video",
+		".avi":  "video",
+		".mov":  "video",
+		".mkv":  "video",
+		".wmv":  "video",
+		".flv":  "video",
+		".mp3":  "audio",
+		".wav":  "audio",
+		".aac":  "audio",
+		".flac": "audio",
+		".ogg":  "audio",
+	}
+)
+
+const (
+	MaxUploadSize = 1024 * 1024 * 1024 // 1GB
 )
 
 func GetErrMsg(code string) string {

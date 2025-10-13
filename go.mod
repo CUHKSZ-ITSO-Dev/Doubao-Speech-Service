@@ -5,6 +5,7 @@ go 1.23.0
 toolchain go1.24.4
 
 require (
+	github.com/gabriel-vasile/mimetype v1.4.10
 	github.com/glebarez/go-sqlite v1.22.0
 	github.com/gogf/gf/v2 v2.9.4
 	github.com/google/uuid v1.6.0

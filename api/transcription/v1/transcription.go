@@ -6,17 +6,28 @@ import (
 	"doubao-speech-service/internal/model/entity"
 )
 
-// 文件上传API
+// 文件上传API（支持单文件和多文件）
 type FileUploadReq struct {
 	g.Meta `path:"/file/upload" method:"post" summary:"文件上传"`
-	// 文件通过multipart form上传，字段名为"file"
+	// 多文件：字段名为"files"，或多个"file"字段
 }
 type FileUploadRes struct {
+	Files   []FileInfo  `json:"files" dc:"成功上传的文件列表"`
+	Errors  []FileError `json:"errors,omitempty" dc:"上传失败的文件错误信息"`
+	Total   int         `json:"total" dc:"总文件数"`
+	Success int         `json:"success" dc:"成功上传数"`
+	Failed  int         `json:"failed" dc:"上传失败数"`
+}
+type FileInfo struct {
 	FileID   string `json:"file_id" dc:"文件唯一标识"`
 	FileURL  string `json:"file_url" dc:"文件访问地址"`
 	FileType string `json:"file_type" dc:"文件类型"`
 	FileSize int64  `json:"file_size" dc:"文件大小(字节)"`
 	FileName string `json:"file_name" dc:"文件名称"`
+}
+type FileError struct {
+	FileName string `json:"file_name" dc:"文件名"`
+	Error    string `json:"error" dc:"错误信息"`
 }
 
 // 任务提交API

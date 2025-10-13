@@ -46,7 +46,7 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 	}{}
 
 	submitReq.Input.Offline.FileURL = fileInfo["file_url"].String()
-	submitReq.Input.Offline.FileType = fileInfo["file_type"].String()
+	submitReq.Input.Offline.FileType = consts.TranscriptionExt[fileInfo["file_type"].String()]
 	submitReq.Params = *req
 
 	// 提交任务到第三方API
@@ -88,7 +88,6 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 			"task_id":       taskID,
 			"upload_params": req,
 			"status":        "pending",
-			"updated_at":    "NOW()",
 		}).Update()
 	if err != nil {
 		return nil, gerror.Wrap(err, "更新任务记录失败")

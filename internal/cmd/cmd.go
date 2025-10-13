@@ -8,6 +8,7 @@ import (
 	"github.com/gogf/gf/v2/os/gcmd"
 
 	"doubao-speech-service/internal/controller/transcription"
+	"doubao-speech-service/internal/middlewares"
 	transcriptionSvc "doubao-speech-service/internal/service/transcription"
 )
 
@@ -20,6 +21,7 @@ var (
 			s := g.Server()
 			s.SetPort(g.Cfg().MustGet(ctx, "server.port").Int())
 			s.SetClientMaxBodySize(1024 * 1024 * 1024)
+			s.Use(middlewares.BrotliMiddleware)
 
 			oai := s.GetOpenApi()
 			oai.Config.CommonResponse = ghttp.DefaultHandlerResponse{}

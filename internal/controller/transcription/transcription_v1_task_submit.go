@@ -2,7 +2,6 @@ package transcription
 
 import (
 	"context"
-	"time"
 
 	v1 "doubao-speech-service/api/transcription/v1"
 	"doubao-speech-service/internal/consts"
@@ -91,22 +90,7 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 		return nil, gerror.Wrap(err, "更新任务记录失败")
 	}
 
-	// 启动后台任务轮询结果
-	go func(taskID, reqID string) {
-		bgCtx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
-		defer cancel()
-		t := time.NewTicker(30 * time.Second)
-		defer t.Stop()
-
-		for range t.C {
-			status, err := transcription.Query(bgCtx, taskID, reqID)
-			if err != nil || status == "running" || status == "pending" {
-				continue
-			}
-			g.Log().Infof(bgCtx, "[%s] 任务 %s 提交结束。最终状态：%s", reqID, taskID, status)
-			break
-		}
-	}(taskID, transcriptionRecord["request_id"].String())
+	transcription.Polling(taskID, transcriptionRecord["request_id"].String())
 
 	return &v1.TaskSubmitRes{
 		TaskID:    taskID,

@@ -11,6 +11,7 @@ import (
 )
 
 type ITranscriptionV1 interface {
-	Upload(ctx context.Context, req *v1.UploadReq) (res *v1.UploadRes, err error)
+	FileUpload(ctx context.Context, req *v1.FileUploadReq) (res *v1.FileUploadRes, err error)
+	TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (res *v1.TaskSubmitRes, err error)
 	Query(ctx context.Context, req *v1.QueryReq) (res *v1.QueryRes, err error)
 }

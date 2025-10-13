@@ -2,19 +2,28 @@ package v1
 
 import (
 	"github.com/gogf/gf/v2/frame/g"
-	"github.com/gogf/gf/v2/encoding/gjson"
 
 	"doubao-speech-service/internal/model/entity"
 )
 
-type UploadReq struct {
-	g.Meta `path:"/upload" method:"post" summary:"任务创建"`
-	Input  struct {
-		Offline struct {
-			FileURL  string `json:"FileURL" dc:"文件url 文件大小< 1G 时长2小时"`
-			FileType string `json:"FileType" v:"required|in:audio,video" dc:"文件类型，audio：音频，video：视频"`
-		} `json:"Offline" v:"required"`
-	} `json:"Input" v:"required"`
+// 文件上传API
+type FileUploadReq struct {
+	g.Meta `path:"/file/upload" method:"post" summary:"文件上传"`
+	// 文件通过multipart form上传，字段名为"file"
+}
+type FileUploadRes struct {
+	FileID   string `json:"file_id" dc:"文件唯一标识"`
+	FileURL  string `json:"file_url" dc:"文件访问地址"`
+	FileType string `json:"file_type" dc:"文件类型"`
+	FileSize int64  `json:"file_size" dc:"文件大小(字节)"`
+	FileName string `json:"file_name" dc:"文件名称"`
+}
+
+// 任务提交API
+type TaskSubmitReq struct {
+	g.Meta `path:"/task/submit" method:"post" summary:"任务提交"`
+
+	FileID string `json:"file_id" v:"required" dc:"文件ID，通过文件上传API获得"`
 
 	Params struct {
 		AllActivate bool   `json:"AllActivate" v:"required" dc:"是否打包计费。[非全功能使用，具体功能需设置设对应功能属性为true]"`
@@ -49,8 +58,10 @@ type UploadReq struct {
 		ChapterEnabled bool `json:"ChapterEnabled" dc:"是否开启章节总结"`
 	} `json:"Params"`
 }
-type UploadRes struct {
-	Result *gjson.Json `json:"Result" dc:"结果"`
+type TaskSubmitRes struct {
+	TaskID    string `json:"task_id" dc:"任务ID"`
+	RequestID string `json:"request_id" dc:"请求ID"`
+	Status    string `json:"status" dc:"任务状态"`
 }
 
 type QueryReq struct {

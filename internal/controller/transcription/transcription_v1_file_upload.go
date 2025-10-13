@@ -106,6 +106,12 @@ func (c *ControllerV1) processFileUpload(ctx context.Context, file *ghttp.Upload
 		return result
 	}
 
+	// 重置文件读取器，因为 mimetype.DetectReader 已经读取了一部分
+	if _, err := fileReader.Seek(0, 0); err != nil {
+		result.Error = gerror.Wrap(err, "无法重置文件读取器")
+		return result
+	}
+
 	// 文件校验成功，进入 pending 状态
 	fileID := uuid.New().String()
 	if _, err := dao.Transcription.Ctx(ctx).Data(g.Map{
@@ -136,11 +142,10 @@ func (c *ControllerV1) processFileUpload(ctx context.Context, file *ghttp.Upload
 		result.Error = gerror.Wrap(err, "上传文件失败")
 		return result
 	}
-
 	// 获取预签名URL
 	url, err := tosC.PreSignedURL(&tos.PreSignedURLInput{
 		HTTPMethod: enum.HttpMethodGet,
-		Bucket:     g.Cfg().MustGet(ctx, "volc.lark.tos.bucket").String(),
+		Bucket:     g.Cfg().MustGet(ctx, "volc.tos.bucket").String(),
 		Key:        key,
 	})
 	if err != nil {
@@ -158,7 +163,7 @@ func (c *ControllerV1) processFileUpload(ctx context.Context, file *ghttp.Upload
 				},
 			},
 		},
-		"status":     "uploaded", // 文件已上传，但任务未提交
+		"status": "uploaded", // 文件已上传，但任务未提交
 	}).Where("request_id = ?", fileID).Update(); err != nil {
 		result.Error = gerror.Wrap(err, "数据库写入 TOS 下载地址失败")
 		return result

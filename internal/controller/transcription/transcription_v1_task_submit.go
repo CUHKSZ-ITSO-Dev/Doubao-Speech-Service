@@ -38,13 +38,13 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 				FileType string `json:"FileType"`
 			} `json:"Offline"`
 		} `json:"Input"`
-		Params v1.TaskSubmitReq `json:"Params"`
+		Params v1.TaskSubmitParams `json:"Params"`
 	}{}
 
 	if err = transcriptionRecord["task_params"].Struct(&submitReq); err != nil {
 		return nil, gerror.Wrap(err, "解析数据库任务参数失败")
 	}
-	submitReq.Params = *req
+	submitReq.Params = req.Params
 
 	// 提交任务到第三方API
 	gClient := g.Client()
@@ -62,6 +62,7 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 			submitReq,
 		)
 	if err != nil {
+		response.RawDump()
 		return nil, gerror.Wrap(err, "提交任务失败，POST 请求发生错误")
 	}
 	defer response.Close()

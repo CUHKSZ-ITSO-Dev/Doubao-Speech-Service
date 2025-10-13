@@ -18,9 +18,13 @@ var (
 		Func: func(ctx context.Context, parser *gcmd.Parser) (err error) {
 			s := g.Server()
 			s.SetPort(g.Cfg().MustGet(ctx, "server.port").Int())
+			s.SetClientMaxBodySize(1024 * 1024 * 1024)
+
+			oai := s.GetOpenApi()
+			oai.Config.CommonResponse = ghttp.DefaultHandlerResponse{}
+			oai.Config.CommonResponseDataField = "data"
 			s.SetOpenApiPath(g.Cfg().MustGet(ctx, "server.openapiPath").String())
 			s.SetSwaggerPath(g.Cfg().MustGet(ctx, "server.swaggerPath").String())
-			s.SetClientMaxBodySize(1024 * 1024 * 1024)
 
 			s.Group("/transcription", func(group *ghttp.RouterGroup) {
 				group.Middleware(ghttp.MiddlewareHandlerResponse)

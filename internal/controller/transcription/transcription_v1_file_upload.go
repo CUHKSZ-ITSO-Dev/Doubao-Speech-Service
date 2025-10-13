@@ -13,6 +13,7 @@ import (
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
+	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/google/uuid"
 	"github.com/volcengine/ve-tos-golang-sdk/v2/tos"
 	"github.com/volcengine/ve-tos-golang-sdk/v2/tos/enum"
@@ -111,13 +112,13 @@ func (c *ControllerV1) processFileUpload(ctx context.Context, file *ghttp.Upload
 	if _, err := dao.Transcription.Ctx(ctx).Data(g.Map{
 		"request_id": fileID,
 		"owner":      upn,
-		"file_info":  g.Map{
+		"file_info": g.Map{
 			"object_key": fileID + "/" + file.Filename,
 			"filename":   file.Filename,
 			"file_type":  mType.Extension(),
 			"file_size":  file.Size,
 		},
-		"status":     "pending",
+		"status": "pending",
 	}).Insert(); err != nil {
 		result.Error = gerror.Wrap(err, "数据库新建记录失败")
 		return result
@@ -153,13 +154,14 @@ func (c *ControllerV1) processFileUpload(ctx context.Context, file *ghttp.Upload
 		"task_params": g.Map{
 			"Input": g.Map{
 				"Offline": g.Map{
-					"FileURL": url.SignedUrl,
+					"FileURL":  url.SignedUrl,
 					"FileType": consts.TranscriptionExt[mType.Extension()],
 				},
 			},
 		},
-		"status":   "uploaded", // 文件已上传，但任务未提交
-	}).Where("request_id", fileID).Update(); err != nil {
+		"status":     "uploaded", // 文件已上传，但任务未提交
+		"updated_at": gtime.Now(),
+	}).Where("request_id = ?", fileID).Update(); err != nil {
 		result.Error = gerror.Wrap(err, "数据库写入 TOS 下载地址失败")
 		return result
 	}

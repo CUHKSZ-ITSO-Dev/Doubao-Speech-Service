@@ -9,3 +9,10 @@ gfcli:
         tablesEx: sqlite_sequence
         withTime: true
         gJsonSupport: true
+        fieldMapping:
+          transcription.updated_at:
+            type: "*gtime.Time"
+            import: github.com/gogf/gf/v2/os/gtime
+          transcription.created_at:
+            type: "*gtime.Time"
+            import: github.com/gogf/gf/v2/os/gtime

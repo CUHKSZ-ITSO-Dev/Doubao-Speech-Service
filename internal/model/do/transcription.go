@@ -1,5 +1,5 @@
 // =================================================================================
-// Code generated and maintained by GoFrame CLI tool. DO NOT EDIT. Created at 2025-10-13 18:11:34
+// Code generated and maintained by GoFrame CLI tool. DO NOT EDIT. Created at 2025-10-13 18:37:05
 // =================================================================================
 
 package do
@@ -7,6 +7,7 @@ package do
 import (
 	"github.com/gogf/gf/v2/encoding/gjson"
 	"github.com/gogf/gf/v2/frame/g"
+	"github.com/gogf/gf/v2/os/gtime"
 )
 
 // Transcription is the golang structure of table transcription for DAO operations like Where/Data.
@@ -24,6 +25,6 @@ type Transcription struct {
 	InformationExtractionFile *gjson.Json //
 	SummarizationFile         *gjson.Json //
 	TranslationFile           *gjson.Json //
-	UpdatedAt                 any         //
-	CreatedAt                 any         //
+	UpdatedAt                 *gtime.Time //
+	CreatedAt                 *gtime.Time //
 }

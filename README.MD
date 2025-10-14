@@ -23,7 +23,9 @@
 	- failed：将数据库记录状态改成 failed。同时 goroutine 终止。
 	- success：成功了，则会返回每个模块功能内容下载的链接。开 # 个 goroutine 并发请求数据。然后把每个获取到的结果存入数据库对应字段，并把状态改成 success。同时 goroutine 终止。
 
-### 阶段五：
+### 查询接口：/list
+1. 传入 owner，返回所有的会议纪要记录。
+2. 因为现在还没有用户系统的接入，owner在upload的环节已经被硬编码为 test@test。
 
 ## 后端启动：
 

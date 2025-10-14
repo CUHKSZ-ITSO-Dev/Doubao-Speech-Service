@@ -10,12 +10,12 @@ gfcli:
         gJsonSupport: true
   
   build:
-    name: doubao-speech-service
+    name: doubao-speech-service-$GOOS-$GOARCH
     path: ./bin
     arch: "amd64,arm64"
     system: "darwin,linux,windows"
     packSrc: manifest/config
     packDst: internal/packed/config.go
-    version: 1.0.0
+    version: 1.0.1
     extra: "-ldflags=\"-w -s\""
     exitWhenError: true

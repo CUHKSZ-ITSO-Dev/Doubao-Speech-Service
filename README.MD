@@ -8,6 +8,7 @@
 
 ### 阶段一：pending - /upload
 1. 调用 /transcription/file/upload, 上传文件，multipart/form-data，key：files。文件校验完成后，会在数据库里生成一条记录，生成一个requestID，并把状态改成 pending。
+2. 目前也没有本地存储文件的机制。因此pending状态其实目前没什么用，也没法重试上传到公有云。
 
 ### 阶段二：uploaded - /upload
 1. 文件校验完成后就开始上传文件到火山云 TOS。上传完成后，并生成下载直链之后，会把数据库状态改成 uploaded，把直链写入同一条数据库记录。此时 /upload 控制器完成。

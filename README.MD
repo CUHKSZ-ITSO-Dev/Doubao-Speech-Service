@@ -13,7 +13,7 @@
 1. 文件校验完成后就开始上传文件到火山云 TOS。上传完成后，并生成下载直链之后，会把数据库状态改成 uploaded，把直链写入同一条数据库记录。此时 /upload 控制器完成。
 
 ### 阶段三：submitting - /submit
-1. 调用 /transcription/task/submit，提交 requestID 和 处理参数。后端成功提交任务到火山云之后，就会把返回的 TaskID，提交的处理参数写入同一条数据库记录，并把状态改成 submited。
+1. 调用 /transcription/task/submit，提交 requestID 和 处理参数。后端成功提交任务到火山云之后，就会把返回的 TaskID，提交的处理参数写入同一条数据库记录，并把状态改成 submitted。
 
 ### 阶段四：running - Polling Goroutines
 1. /submit 控制器在最后会启动 Polling goroutines 开始轮询服务器处理状态。同时/submit 控制器会结束请求并返回给前端 TaskID。
@@ -26,6 +26,9 @@
 ### 查询接口：/list
 1. 传入 owner，返回所有的会议纪要记录。
 2. 因为现在还没有用户系统的接入，owner在upload的环节已经被硬编码为 test@test。
+
+### 其他接口：内部服务 Recover
+1. 后端启动时会扫描一遍数据库。对于状态为 submitted 和 running 的记录，每个记录开启一个 Polling goroutine 进行轮询。同时会有日志数据显示恢复了 x 个任务。
 
 ## 后端启动：
 

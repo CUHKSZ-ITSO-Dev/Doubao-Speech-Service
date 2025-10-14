@@ -13,7 +13,7 @@
 ### 阶段二：uploaded - /upload
 1. 文件校验完成后就开始上传文件到火山云 TOS。上传完成后，并生成下载直链之后，会把数据库状态改成 uploaded，把直链写入同一条数据库记录。此时 /upload 控制器完成。
 
-### 阶段三：submitting - /submit
+### 阶段三：submitted - /submit
 1. 调用 /transcription/task/submit，提交 requestID 和 处理参数。后端成功提交任务到火山云之后，就会把返回的 TaskID，提交的处理参数写入同一条数据库记录，并把状态改成 submitted。
 
 ### 阶段四：running - Polling Goroutines

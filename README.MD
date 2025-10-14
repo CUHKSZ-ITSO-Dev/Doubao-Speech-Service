@@ -2,9 +2,30 @@
 
 - 豆包妙记大模型文档：https://www.volcengine.com/docs/6561/1798094
 - Nick Wilde 在 Apifox 邀请你加入项目 豆包语音服务 https://app.apifox.com/invite/project?token=gIlr1vIJZXKNDHVkmIKgR （七天有效期）
-  Apifox 里面的接口 “成功” 接口示例里面有数据，也可以直接用。
+- Apifox 里面的接口 “成功” 接口示例里面有数据，也可以直接用。
 
-## 启动：
+## 架构设计
+
+### 阶段一：pending - /upload
+1. 调用 /transcription/file/upload, 上传文件，multipart/form-data，key：files。文件校验完成后，会在数据库里生成一条记录，生成一个requestID，并把状态改成 pending。
+
+### 阶段二：uploaded - /upload
+1. 文件校验完成后就开始上传文件到火山云 TOS。上传完成后，并生成下载直链之后，会把数据库状态改成 uploaded，把直链写入同一条数据库记录。此时 /upload 控制器完成。
+
+### 阶段三：submitting - /submit
+1. 调用 /transcription/task/submit，提交 requestID 和 处理参数。后端成功提交任务到火山云之后，就会把返回的 TaskID，提交的处理参数写入同一条数据库记录，并把状态改成 submited。
+
+### 阶段四：running - Polling Goroutines
+1. /submit 控制器在最后会启动 Polling goroutines 开始轮询服务器处理状态。同时/submit 控制器会结束请求并返回给前端 TaskID。
+
+### 阶段五：success：成功 failed：失败 - Polling Goroutines
+1. 当 Polling goroutines 每半分钟的轮询后，如果收到云返回的状态为success 或者 failed：
+	- failed：将数据库记录状态改成 failed。同时 goroutine 终止。
+	- success：成功了，则会返回每个模块功能内容下载的链接。开 # 个 goroutine 并发请求数据。然后把每个获取到的结果存入数据库对应字段，并把状态改成 success。同时 goroutine 终止。
+
+### 阶段五：
+
+## 后端启动：
 
 1. 需要一个 PostgreSQL 数据库
 	- 端口：5431

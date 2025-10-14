@@ -51,7 +51,7 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 		SetHeaderMap(g.MapStrStr{
 			"X-Api-App-Key":     g.Cfg().MustGet(ctx, "volc.lark.appid").String(),
 			"X-Api-Access-Key":  g.Cfg().MustGet(ctx, "volc.lark.accessKey").String(),
-			"X-Api-Resource-Id": "volc.lark.minutes",
+			"X-Api-Resource-Id": g.Cfg().MustGet(ctx, "volc.lark.service").String(),
 			"X-Api-Request-Id":  transcriptionRecord["request_id"].String(),
 			"X-Api-Sequence":    "-1",
 		}).

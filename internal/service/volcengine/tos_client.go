@@ -16,7 +16,7 @@ func tosInit() {
 	if client, err = tos.NewClientV2(
 		g.Cfg().MustGet(ctx, "volc.tos.endpoint").String(),
 		tos.WithCredentials(credential),
-		tos.WithRegion(g.Cfg().MustGet(ctx, "volc.tos.region").String()),
+		tos.WithRegion(g.Cfg().MustGet(ctx, "volc.region").String()),
 	); err != nil {
 		panic(err)
 	}

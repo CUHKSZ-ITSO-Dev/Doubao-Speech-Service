@@ -6,5 +6,6 @@ var ctx = context.Background()
 
 func init() {
 	tosInit()
-	consoleInit()
+	// consoleInit()
+	// SpeechSvcBillQuery(ctx)
 }

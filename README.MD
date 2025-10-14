@@ -20,9 +20,10 @@
 1. /submit 控制器在最后会启动 Polling goroutines 开始轮询服务器处理状态。同时/submit 控制器会结束请求并返回给前端 TaskID。
 
 ### 阶段五：success：成功 failed：失败 - Polling Goroutines
-1. 当 Polling goroutines 每半分钟的轮询后，如果收到云返回的状态为success 或者 failed：
+1. 当 Polling goroutines 每半分钟的轮询（最多24小时）后，如果收到云返回的状态为success 或者 failed：
 	- failed：将数据库记录状态改成 failed。同时 goroutine 终止。
 	- success：成功了，则会返回每个模块功能内容下载的链接。开 # 个 goroutine 并发请求数据。然后把每个获取到的结果存入数据库对应字段，并把状态改成 success。同时 goroutine 终止。
+2. 如果收到 running 或者查询时出错，则忽略，继续等待下次轮询。
 
 ### 查询接口：/list
 1. 传入 owner，返回所有的会议纪要记录。

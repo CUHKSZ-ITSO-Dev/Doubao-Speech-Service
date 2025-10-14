@@ -1,9 +1,6 @@
 package volcengine
 
 import (
-	"context"
-	"fmt"
-
 	"github.com/volcengine/ve-tos-golang-sdk/v2/tos"
 
 	"github.com/gogf/gf/v2/frame/g"
@@ -11,11 +8,10 @@ import (
 
 var client *tos.ClientV2
 
-func init() {
-	fmt.Println("TOS GO SDK Version: ", tos.Version)
-	ctx := context.Background()
+func tosInit() {
+	g.Log().Info(ctx, "Volcengine TOS GO SDK Version:", tos.Version)
 
-	credential := tos.NewStaticCredentials(g.Cfg().MustGet(ctx, "volc.tos.ak").String(), g.Cfg().MustGet(ctx, "volc.tos.sk").String())
+	credential := tos.NewStaticCredentials(g.Cfg().MustGet(ctx, "volc.ak").String(), g.Cfg().MustGet(ctx, "volc.sk").String())
 	var err error
 	if client, err = tos.NewClientV2(
 		g.Cfg().MustGet(ctx, "volc.tos.endpoint").String(),
@@ -24,6 +20,7 @@ func init() {
 	); err != nil {
 		panic(err)
 	}
+	g.Log().Info(ctx, "Volcengine TOS Client initialized")
 }
 
 func GetClient() *tos.ClientV2 {

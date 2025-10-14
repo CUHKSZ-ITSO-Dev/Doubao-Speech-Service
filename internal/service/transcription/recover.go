@@ -11,7 +11,7 @@ import (
 
 func Recover(ctx context.Context) {
 	transRecords := []entity.Transcription{}
-	dao.Transcription.Ctx(ctx).WhereIn("status", []string{"pending", "running"}).Scan(&transRecords)
+	dao.Transcription.Ctx(ctx).WhereIn("status", []string{"submitted", "running"}).Scan(&transRecords)
 	for _, v := range transRecords {
 		Polling(v.TaskId, v.RequestId)
 	}

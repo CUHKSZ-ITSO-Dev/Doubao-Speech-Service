@@ -84,7 +84,7 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 		Data(g.Map{
 			"task_id":     taskID,
 			"task_params": submitReq,
-			"status":      "pending",
+			"status":      "submitted",
 		}).Update()
 	if err != nil {
 		return nil, gerror.Wrap(err, "更新任务记录失败")

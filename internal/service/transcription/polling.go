@@ -16,7 +16,7 @@ func Polling(taskId, requestId string) {
 
 		for range t.C {
 			status, err := Query(bgCtx, taskId, requestId)
-			if err != nil || status == "running" || status == "pending" {
+			if err != nil || status == "running" {
 				continue
 			}
 			g.Log().Infof(bgCtx, "[%s] 任务 %s 轮询结束。最终状态：%s", requestId, taskId, status)

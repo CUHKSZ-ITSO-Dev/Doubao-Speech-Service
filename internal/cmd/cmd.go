@@ -22,7 +22,8 @@ var (
 			s.SetPort(g.Cfg().MustGet(ctx, "server.port").Int())
 			s.SetClientMaxBodySize(1024 * 1024 * 1024)
 			s.Use(middlewares.BrotliMiddleware)
-
+			s.Use(ghttp.MiddlewareCORS)
+			
 			oai := s.GetOpenApi()
 			oai.Config.CommonResponse = ghttp.DefaultHandlerResponse{}
 			oai.Config.CommonResponseDataField = "Data"

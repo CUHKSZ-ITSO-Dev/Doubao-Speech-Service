@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS transcription (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     task_id TEXT,
     request_id TEXT NOT NULL,
     owner TEXT NOT NULL,
@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS transcription (
     information_extraction_file JSON,
     summarization_file JSON,
     translation_file JSON,
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_transcription_request_id ON transcription(request_id);

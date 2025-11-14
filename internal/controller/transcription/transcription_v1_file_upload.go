@@ -37,7 +37,7 @@ func (c *ControllerV1) FileUpload(ctx context.Context, req *v1.FileUploadReq) (r
 			defer wg.Done()
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
-			resultCh <- c.processFileUpload(ctx, file, "test@test")
+			resultCh <- c.processFileUpload(ctx, file, g.RequestFromCtx(ctx).Header.Get("X-User-ID"))
 		}(file)
 	}
 

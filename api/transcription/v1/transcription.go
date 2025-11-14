@@ -74,7 +74,6 @@ type TaskSubmitParams struct {
 }
 
 type ListReq struct {
-	g.Meta `path:"/list" method:"post" summary:"任务查询"`
-	Owner  string `v:"required" dc:"所有者"`
+	g.Meta `path:"/list" method:"get" summary:"任务查询"`
 }
 type ListRes []entity.Transcription

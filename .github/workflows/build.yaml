@@ -62,5 +62,6 @@ jobs:
         with:
           context: .
           file: Dockerfile
-          tags: ghcr.io/cuhksz-itso-dev/doubao-speech-service:${{ github.ref_name }}
           push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

@@ -78,29 +78,29 @@ func ProxyWebSocket(ctx context.Context, srcName string, src, dst *websocket.Con
 			}
 		}
 
-		if srcName == "upstream" {
-			// 处理上游消息的日志输出
-			var msgStr string
-			if msgType == websocket.TextMessage {
-				// 文本消息直接使用
-				msgStr = string(msg)
-			} else {
-				msgBytes := msg
-				jsonStart := -1
-				for i, b := range msgBytes {
-					if b == '{' {
-						jsonStart = i
-						break
-					}
-				}
-				if jsonStart >= 0 && jsonStart < len(msgBytes) {
-					msgStr = string(msgBytes[jsonStart:])
-				} else {
-					msgStr = string(msgBytes)
-				}
-			}
-			logger.Infof(ctx, msgStr)
-		}
+		// if srcName == "upstream" {
+		// 	// 处理上游消息的日志输出
+		// 	var msgStr string
+		// 	if msgType == websocket.TextMessage {
+		// 		// 文本消息直接使用
+		// 		msgStr = string(msg)
+		// 	} else {
+		// 		msgBytes := msg
+		// 		jsonStart := -1
+		// 		for i, b := range msgBytes {
+		// 			if b == '{' {
+		// 				jsonStart = i
+		// 				break
+		// 			}
+		// 		}
+		// 		if jsonStart >= 0 && jsonStart < len(msgBytes) {
+		// 			msgStr = string(msgBytes[jsonStart:])
+		// 		} else {
+		// 			msgStr = string(msgBytes)
+		// 		}
+		// 	}
+		// 	logger.Infof(ctx, msgStr)
+		// }
 
 		if err := dst.WriteMessage(msgType, msg); err != nil {
 			finalErr = err

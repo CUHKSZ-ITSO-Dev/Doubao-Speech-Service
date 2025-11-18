@@ -38,6 +38,7 @@ type Recorder struct {
 // RecordingResult 提供录音文件的元数据，供上传流程使用。
 type RecordingResult struct {
 	ConnectID string
+	Owner     string
 	FilePath  string
 	Dir       string
 	Size      int64

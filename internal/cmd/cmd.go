@@ -4,10 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/gogf/gf/v2/frame/g"
@@ -42,6 +39,9 @@ var (
 			fmt.Println()
 			s := g.Server()
 			logger := g.Log()
+			if err := meetingRecordSvc.Init(ctx); err != nil {
+				logger.Warningf(ctx, "meeting record service init failed: %v", err)
+			}
 			s.SetPort(g.Cfg().MustGet(ctx, "server.port").Int())
 			s.SetClientMaxBodySize(1024 * 1024 * 1024)
 			s.Use(middlewares.BrotliMiddleware)
@@ -147,10 +147,17 @@ func setupWebSocketHandler(s *ghttp.Server, logger *glog.Logger) *ghttp.Server {
 			logger.Infof(reqCtx, "火山引擎连接已建立，connect_id=%s", connectID)
 		}
 
+		recorder, err := meetingRecordSvc.NewRecorder(reqCtx, connectID)
+		if err != nil && !errors.Is(err, meetingRecordSvc.ErrRecorderDisabled) {
+			logger.Warningf(reqCtx, "录音初始化失败，connect_id=%s: %v", connectID, err)
+		}
+
 		errCh := make(chan error, 2)
 
-		go meetingRecordSvc.ProxyWebSocket(reqCtx, "client", clientConn, upstreamConn, errCh)
-		go meetingRecordSvc.ProxyWebSocket(reqCtx, "upstream", upstreamConn, clientConn, errCh)
+		go meetingRecordSvc.ProxyWebSocket(reqCtx, "client", clientConn, upstreamConn, recorder, errCh)
+		go meetingRecordSvc.ProxyWebSocket(reqCtx, "upstream", upstreamConn, clientConn, nil, errCh)
+
+		logger.Infof(reqCtx, "开始会话")
 
 		firstErr := <-errCh
 		_ = clientConn.Close()
@@ -164,6 +171,16 @@ func setupWebSocketHandler(s *ghttp.Server, logger *glog.Logger) *ghttp.Server {
 			logger.Warningf(reqCtx, "WebSocket 转发通道异常关闭 (second): %v", secondErr)
 		}
 
+		if recorder != nil {
+			// logger.Infof(reqCtx, "开始收尾录音，connect_id=%s", connectID)
+			if result, err := recorder.Finalize(); err != nil {
+				logger.Warningf(reqCtx, "录音收尾失败，connect_id=%s: %v", connectID, err)
+			} else if result != nil {
+				logger.Infof(reqCtx, "录音完成，connect_id=%s, bytes=%d", connectID, result.Size)
+				meetingRecordSvc.EnqueueUpload(reqCtx, result)
+			}
+		}
+
 		logger.Infof(reqCtx, "WebSocket 转发完成，connect_id=%s", connectID)
 	})
 
@@ -173,24 +190,6 @@ func setupWebSocketHandler(s *ghttp.Server, logger *glog.Logger) *ghttp.Server {
 }
 
 func isNormalClosure(err error) bool {
-	if err == nil {
-		return true
-	}
-	if errors.Is(err, io.EOF) || errors.Is(err, websocket.ErrCloseSent) {
-		return true
-	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	if errors.Is(err, net.ErrClosed) || errors.Is(err, os.ErrClosed) {
-		return true
-	}
-	if closeErr, ok := err.(*websocket.CloseError); ok {
-		switch closeErr.Code {
-		case websocket.CloseNormalClosure, websocket.CloseNoStatusReceived, websocket.CloseGoingAway:
-			return true
-		}
-	}
 	if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseNoStatusReceived, websocket.CloseGoingAway) {
 		return true
 	}

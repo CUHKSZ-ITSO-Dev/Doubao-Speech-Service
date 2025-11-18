@@ -87,7 +87,7 @@ func setupWebSocketHandler(s *ghttp.Server, logger *glog.Logger) *ghttp.Server {
 		EnableCompression: true,
 	}
 
-	s.BindHandler("/ws", func(r *ghttp.Request) {
+	s.BindHandler("/doubao-speech-service/ws", func(r *ghttp.Request) {
 		// Upgrade HTTP connection to WebSocket
 		connectID := uuid.NewString()
 		r.Response.Header().Set("X-Api-Connect-Id", connectID)

@@ -44,7 +44,7 @@ var (
 			s.SetClientMaxBodySize(1024 * 1024 * 1024)
 			s.Use(middlewares.BrotliMiddleware)
 			s.Use(ghttp.MiddlewareCORS)
-			s = setupWebSocketHandler(s)
+			s = setupWebSocketHandler(ctx, s)
 			oai := s.GetOpenApi()
 			oai.Config.CommonResponse = ghttp.DefaultHandlerResponse{}
 			oai.Config.CommonResponseDataField = "Data"
@@ -66,7 +66,7 @@ var (
 	}
 )
 
-func setupWebSocketHandler(s *ghttp.Server) *ghttp.Server {
+func setupWebSocketHandler(ctx context.Context, s *ghttp.Server) *ghttp.Server {
 	var (
 		wsUpGrader = websocket.Upgrader{
 			// TODO: 同源检查
@@ -87,8 +87,8 @@ func setupWebSocketHandler(s *ghttp.Server) *ghttp.Server {
 
 	s.BindHandler("/doubao-speech-service/ws", func(r *ghttp.Request) {
 		// Upgrade HTTP connection to WebSocket
-		g.Log().Infof(r.Context(), "r.Header: %v", r.Header)
-		traceID := gctx.CtxId(r.Context())
+		g.Log().Infof(ctx, "r.Header: %v", r.Header)
+		traceID := gctx.CtxId(ctx)
 		userID := r.Header.Get("X-User-ID")
 		r.Response.Write(traceID)
 
@@ -99,15 +99,13 @@ func setupWebSocketHandler(s *ghttp.Server) *ghttp.Server {
 		}
 		defer clientConn.Close()
 
-		reqCtx := r.Context()
-
-		endpoint := g.Cfg().MustGet(reqCtx, "volc.asr.endpoint").String()
-		appKey := g.Cfg().MustGet(reqCtx, "volc.asr.appKey").String()
-		accessKey := g.Cfg().MustGet(reqCtx, "volc.asr.accessKey").String()
-		resourceID := g.Cfg().MustGet(reqCtx, "volc.asr.resourceId").String()
+		endpoint := g.Cfg().MustGet(ctx, "volc.asr.endpoint").String()
+		appKey := g.Cfg().MustGet(ctx, "volc.asr.appKey").String()
+		accessKey := g.Cfg().MustGet(ctx, "volc.asr.accessKey").String()
+		resourceID := g.Cfg().MustGet(ctx, "volc.asr.resourceId").String()
 
 		if endpoint == "" || appKey == "" || accessKey == "" || resourceID == "" {
-			g.Log().Error(reqCtx, "WebSocket 转发所需的火山引擎配置缺失，请检查 volc.asr.* 配置")
+			g.Log().Error(ctx, "WebSocket 转发所需的火山引擎配置缺失，请检查 volc.asr.* 配置")
 			_ = clientConn.WriteControl(
 				websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "server configuration error"),
@@ -121,12 +119,12 @@ func setupWebSocketHandler(s *ghttp.Server) *ghttp.Server {
 		upstreamHeaders.Set("X-Api-Access-Key", accessKey)
 		upstreamHeaders.Set("X-Api-Resource-Id", resourceID)
 
-		upstreamConn, resp, err := dialer.DialContext(reqCtx, endpoint, upstreamHeaders)
+		upstreamConn, resp, err := dialer.DialContext(ctx, endpoint, upstreamHeaders)
 		if err != nil {
 			if resp != nil && resp.Body != nil {
 				resp.Body.Close()
 			}
-			g.Log().Errorf(reqCtx, "连接火山引擎双向流式识别服务失败: %v", err)
+			g.Log().Errorf(ctx, "连接火山引擎双向流式识别服务失败: %v", err)
 			_ = clientConn.WriteControl(
 				websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream unavailable"),
@@ -141,22 +139,22 @@ func setupWebSocketHandler(s *ghttp.Server) *ghttp.Server {
 			logID = resp.Header.Get("X-Tt-Logid")
 		}
 		if logID != "" {
-			g.Log().Infof(reqCtx, "火山引擎连接已建立，connect_id=%s, logid=%s", traceID, logID)
+			g.Log().Infof(ctx, "火山引擎连接已建立，connect_id=%s, logid=%s", traceID, logID)
 		} else {
-			g.Log().Infof(reqCtx, "火山引擎连接已建立，connect_id=%s", traceID)
+			g.Log().Infof(ctx, "火山引擎连接已建立，connect_id=%s", traceID)
 		}
 
-		recorder, err := meetingRecordSvc.NewRecorder(reqCtx, traceID)
+		recorder, err := meetingRecordSvc.NewRecorder(ctx, traceID)
 		if err != nil && !errors.Is(err, meetingRecordSvc.ErrRecorderDisabled) {
-			g.Log().Warningf(reqCtx, "录音初始化失败，connect_id=%s: %v", traceID, err)
+			g.Log().Warningf(ctx, "录音初始化失败，connect_id=%s: %v", traceID, err)
 		}
 
 		errCh := make(chan error, 2)
 
-		go meetingRecordSvc.ProxyWebSocket(reqCtx, "client", clientConn, upstreamConn, recorder, errCh)
-		go meetingRecordSvc.ProxyWebSocket(reqCtx, "upstream", upstreamConn, clientConn, nil, errCh)
+		go meetingRecordSvc.ProxyWebSocket(ctx, "client", clientConn, upstreamConn, recorder, errCh)
+		go meetingRecordSvc.ProxyWebSocket(ctx, "upstream", upstreamConn, clientConn, nil, errCh)
 
-		g.Log().Infof(reqCtx, "开始会话")
+		g.Log().Infof(ctx, "开始会话")
 
 		firstErr := <-errCh
 		_ = clientConn.Close()
@@ -164,24 +162,24 @@ func setupWebSocketHandler(s *ghttp.Server) *ghttp.Server {
 		secondErr := <-errCh
 
 		if !isNormalClosure(firstErr) {
-			g.Log().Warningf(reqCtx, "WebSocket 转发通道异常关闭 (first): %v", firstErr)
+			g.Log().Warningf(ctx, "WebSocket 转发通道异常关闭 (first): %v", firstErr)
 		}
 		if !isNormalClosure(secondErr) {
-			g.Log().Warningf(reqCtx, "WebSocket 转发通道异常关闭 (second): %v", secondErr)
+			g.Log().Warningf(ctx, "WebSocket 转发通道异常关闭 (second): %v", secondErr)
 		}
 
 		if recorder != nil {
 			// g.Log().Infof(reqCtx, "开始收尾录音，connect_id=%s", connectID)
 			if result, err := recorder.Finalize(); err != nil {
-				g.Log().Warningf(reqCtx, "录音收尾失败，connect_id=%s: %v", traceID, err)
+				g.Log().Warningf(ctx, "录音收尾失败，connect_id=%s: %v", traceID, err)
 			} else if result != nil {
-				g.Log().Infof(reqCtx, "录音完成，connect_id=%s, bytes=%d", traceID, result.Size)
+				g.Log().Infof(ctx, "录音完成，connect_id=%s, bytes=%d", traceID, result.Size)
 				result.Owner = userID
-				meetingRecordSvc.EnqueueUpload(reqCtx, result)
+				meetingRecordSvc.EnqueueUpload(ctx, result)
 			}
 		}
 
-		g.Log().Infof(reqCtx, "WebSocket 转发完成，connect_id=%s", traceID)
+		g.Log().Infof(ctx, "WebSocket 转发完成，connect_id=%s", traceID)
 	})
 
 	// // Configure static file serving

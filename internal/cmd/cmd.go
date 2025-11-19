@@ -38,15 +38,14 @@ var (
 			fmt.Println("Copyright 2025 The Chinese University of Hong Kong, Shenzhen")
 			fmt.Println()
 			s := g.Server()
-			logger := g.Log()
 			if err := meetingRecordSvc.Init(ctx); err != nil {
-				logger.Warningf(ctx, "meeting record service init failed: %v", err)
+				g.Log().Warningf(ctx, "meeting record service init failed: %v", err)
 			}
 			s.SetPort(g.Cfg().MustGet(ctx, "server.port").Int())
 			s.SetClientMaxBodySize(1024 * 1024 * 1024)
 			s.Use(middlewares.BrotliMiddleware)
 			s.Use(ghttp.MiddlewareCORS)
-			s = setupWebSocketHandler(s, logger)
+			s = setupWebSocketHandler(s)
 			oai := s.GetOpenApi()
 			oai.Config.CommonResponse = ghttp.DefaultHandlerResponse{}
 			oai.Config.CommonResponseDataField = "Data"
@@ -68,7 +67,7 @@ var (
 	}
 )
 
-func setupWebSocketHandler(s *ghttp.Server, logger *glog.Logger) *ghttp.Server {
+func setupWebSocketHandler(s *ghttp.Server) *ghttp.Server {
 	var (
 		wsUpGrader = websocket.Upgrader{
 			// TODO: 同源检查
@@ -107,7 +106,7 @@ func setupWebSocketHandler(s *ghttp.Server, logger *glog.Logger) *ghttp.Server {
 		resourceID := g.Cfg().MustGet(reqCtx, "volc.asr.resourceId").String()
 
 		if endpoint == "" || appKey == "" || accessKey == "" || resourceID == "" {
-			logger.Error(reqCtx, "WebSocket 转发所需的火山引擎配置缺失，请检查 volc.asr.* 配置")
+			g.Log().Error(reqCtx, "WebSocket 转发所需的火山引擎配置缺失，请检查 volc.asr.* 配置")
 			_ = clientConn.WriteControl(
 				websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "server configuration error"),
@@ -127,7 +126,7 @@ func setupWebSocketHandler(s *ghttp.Server, logger *glog.Logger) *ghttp.Server {
 			if resp != nil && resp.Body != nil {
 				resp.Body.Close()
 			}
-			logger.Errorf(reqCtx, "连接火山引擎双向流式识别服务失败: %v", err)
+			g.Log().Errorf(reqCtx, "连接火山引擎双向流式识别服务失败: %v", err)
 			_ = clientConn.WriteControl(
 				websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream unavailable"),
@@ -142,14 +141,14 @@ func setupWebSocketHandler(s *ghttp.Server, logger *glog.Logger) *ghttp.Server {
 			logID = resp.Header.Get("X-Tt-Logid")
 		}
 		if logID != "" {
-			logger.Infof(reqCtx, "火山引擎连接已建立，connect_id=%s, logid=%s", connectID, logID)
+			g.Log().Infof(reqCtx, "火山引擎连接已建立，connect_id=%s, logid=%s", traceID, logID)
 		} else {
-			logger.Infof(reqCtx, "火山引擎连接已建立，connect_id=%s", connectID)
+			g.Log().Infof(reqCtx, "火山引擎连接已建立，connect_id=%s", traceID)
 		}
 
 		recorder, err := meetingRecordSvc.NewRecorder(reqCtx, connectID)
 		if err != nil && !errors.Is(err, meetingRecordSvc.ErrRecorderDisabled) {
-			logger.Warningf(reqCtx, "录音初始化失败，connect_id=%s: %v", connectID, err)
+			g.Log().Warningf(reqCtx, "录音初始化失败，connect_id=%s: %v", traceID, err)
 		}
 
 		errCh := make(chan error, 2)
@@ -157,7 +156,7 @@ func setupWebSocketHandler(s *ghttp.Server, logger *glog.Logger) *ghttp.Server {
 		go meetingRecordSvc.ProxyWebSocket(reqCtx, "client", clientConn, upstreamConn, recorder, errCh)
 		go meetingRecordSvc.ProxyWebSocket(reqCtx, "upstream", upstreamConn, clientConn, nil, errCh)
 
-		logger.Infof(reqCtx, "开始会话")
+		g.Log().Infof(reqCtx, "开始会话")
 
 		firstErr := <-errCh
 		_ = clientConn.Close()
@@ -165,23 +164,24 @@ func setupWebSocketHandler(s *ghttp.Server, logger *glog.Logger) *ghttp.Server {
 		secondErr := <-errCh
 
 		if !isNormalClosure(firstErr) {
-			logger.Warningf(reqCtx, "WebSocket 转发通道异常关闭 (first): %v", firstErr)
+			g.Log().Warningf(reqCtx, "WebSocket 转发通道异常关闭 (first): %v", firstErr)
 		}
 		if !isNormalClosure(secondErr) {
-			logger.Warningf(reqCtx, "WebSocket 转发通道异常关闭 (second): %v", secondErr)
+			g.Log().Warningf(reqCtx, "WebSocket 转发通道异常关闭 (second): %v", secondErr)
 		}
 
 		if recorder != nil {
-			// logger.Infof(reqCtx, "开始收尾录音，connect_id=%s", connectID)
+			// g.Log().Infof(reqCtx, "开始收尾录音，connect_id=%s", connectID)
 			if result, err := recorder.Finalize(); err != nil {
-				logger.Warningf(reqCtx, "录音收尾失败，connect_id=%s: %v", connectID, err)
+				g.Log().Warningf(reqCtx, "录音收尾失败，connect_id=%s: %v", traceID, err)
 			} else if result != nil {
-				logger.Infof(reqCtx, "录音完成，connect_id=%s, bytes=%d", connectID, result.Size)
+				g.Log().Infof(reqCtx, "录音完成，connect_id=%s, bytes=%d", traceID, result.Size)
+				result.Owner = userID
 				meetingRecordSvc.EnqueueUpload(reqCtx, result)
 			}
 		}
 
-		logger.Infof(reqCtx, "WebSocket 转发完成，connect_id=%s", connectID)
+		g.Log().Infof(reqCtx, "WebSocket 转发完成，connect_id=%s", traceID)
 	})
 
 	// // Configure static file serving

@@ -24,17 +24,16 @@ func startUploadWorkers(ctx context.Context, opts recordOptions) {
 }
 
 func uploadWorker(ctx context.Context) {
-	logger := g.Log()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case item := <-uploadQueue:
 			if err := uploadOne(ctx, item); err != nil {
-				logger.Warningf(ctx, "record upload failed, connect_id=%s: %v", item.ConnectID, err)
+				g.Log().Warningf(ctx, "record upload failed, connect_id=%s: %v", item.ConnectID, err)
 				continue
 			}
-			logger.Infof(ctx, "record upload completed, connect_id=%s, size=%d bytes", item.ConnectID, item.Size)
+			g.Log().Infof(ctx, "record upload completed, connect_id=%s, size=%d bytes", item.ConnectID, item.Size)
 			_ = os.Remove(item.FilePath)
 			_ = os.Remove(item.Dir)
 		}

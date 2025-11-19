@@ -92,6 +92,14 @@ func setupWebSocketHandler(ctx context.Context, s *ghttp.Server) *ghttp.Server {
 		userID := r.Header.Get("X-User-ID")
 		r.Response.Write(traceID)
 
+		if userID == "" {
+			r.Response.WriteJson(g.Map{
+				"code":    http.StatusUnauthorized,
+				"message": "userID is required",
+			})
+			return
+		}
+
 		sessionID := r.Session.MustId()
 		protocol := "http"
 		if r.TLS != nil {

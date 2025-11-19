@@ -10,8 +10,7 @@ import (
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
 	"github.com/gogf/gf/v2/os/gcmd"
-	"github.com/gogf/gf/v2/os/glog"
-	"github.com/google/uuid"
+	"github.com/gogf/gf/v2/os/gctx"
 	"github.com/gorilla/websocket"
 
 	"doubao-speech-service/internal/controller/transcription"
@@ -88,8 +87,10 @@ func setupWebSocketHandler(s *ghttp.Server) *ghttp.Server {
 
 	s.BindHandler("/doubao-speech-service/ws", func(r *ghttp.Request) {
 		// Upgrade HTTP connection to WebSocket
-		connectID := uuid.NewString()
-		r.Response.Header().Set("X-Api-Connect-Id", connectID)
+		g.Log().Infof(r.Context(), "r.Header: %v", r.Header)
+		traceID := gctx.CtxId(r.Context())
+		userID := r.Header.Get("X-User-ID")
+		r.Response.Write(traceID)
 
 		clientConn, err := wsUpGrader.Upgrade(r.Response.Writer, r.Request, nil)
 		if err != nil {
@@ -119,7 +120,6 @@ func setupWebSocketHandler(s *ghttp.Server) *ghttp.Server {
 		upstreamHeaders.Set("X-Api-App-Key", appKey)
 		upstreamHeaders.Set("X-Api-Access-Key", accessKey)
 		upstreamHeaders.Set("X-Api-Resource-Id", resourceID)
-		upstreamHeaders.Set("X-Api-Connect-Id", connectID)
 
 		upstreamConn, resp, err := dialer.DialContext(reqCtx, endpoint, upstreamHeaders)
 		if err != nil {
@@ -146,7 +146,7 @@ func setupWebSocketHandler(s *ghttp.Server) *ghttp.Server {
 			g.Log().Infof(reqCtx, "火山引擎连接已建立，connect_id=%s", traceID)
 		}
 
-		recorder, err := meetingRecordSvc.NewRecorder(reqCtx, connectID)
+		recorder, err := meetingRecordSvc.NewRecorder(reqCtx, traceID)
 		if err != nil && !errors.Is(err, meetingRecordSvc.ErrRecorderDisabled) {
 			g.Log().Warningf(reqCtx, "录音初始化失败，connect_id=%s: %v", traceID, err)
 		}

@@ -92,6 +92,13 @@ func setupWebSocketHandler(ctx context.Context, s *ghttp.Server) *ghttp.Server {
 		userID := r.Header.Get("X-User-ID")
 		r.Response.Write(traceID)
 
+		sessionID := r.Session.MustId()
+		protocol := "http"
+		if r.TLS != nil {
+			protocol = "https"
+		}
+		g.Log().Infof(ctx, `[微服务-请求] request=%+v url=%s session=%s user=%s remote=%s ua=%s protocol=%s`, r.Request, r.URL.String(), sessionID, userID, r.RemoteAddr, r.Header.Get("User-Agent"), protocol)
+
 		clientConn, err := wsUpGrader.Upgrade(r.Response.Writer, r.Request, nil)
 		if err != nil {
 			r.Response.Write(err.Error())

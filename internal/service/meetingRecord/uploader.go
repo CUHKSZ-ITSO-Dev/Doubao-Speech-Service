@@ -3,14 +3,12 @@ package meetingRecord
 import (
 	"context"
 	"fmt"
-	"mime/multipart"
 	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/gogf/gf/v2/frame/g"
 
-	transcriptionCtl "doubao-speech-service/internal/controller/transcription"
+	"doubao-speech-service/internal/service/volcengine"
 )
 
 var uploadOnce sync.Once
@@ -53,10 +51,11 @@ func uploadOne(ctx context.Context, item RecordingResult) error {
 		return fmt.Errorf("missing owner for recording: %s", item.ConnectID)
 	}
 
-	res := transcriptionCtl.ProcessFileUpload(ctx, &recordingUploadFile{
-		path: item.FilePath,
-		size: fileInfo.Size(),
-	}, item.Owner)
+	uploadFile, err := volcengine.NewLocalUploadFile(item.FilePath)
+	if err != nil {
+		return err
+	}
+	res := volcengine.ProcessFileUpload(ctx, uploadFile, item.Owner)
 	return res.Error
 }
 
@@ -71,21 +70,4 @@ func EnqueueUpload(ctx context.Context, result *RecordingResult) {
 	default:
 		uploadQueue <- *result
 	}
-}
-
-type recordingUploadFile struct {
-	path string
-	size int64
-}
-
-func (r *recordingUploadFile) FileName() string {
-	return filepath.Base(r.path)
-}
-
-func (r *recordingUploadFile) FileSize() int64 {
-	return r.size
-}
-
-func (r *recordingUploadFile) Open() (multipart.File, error) {
-	return os.Open(r.path)
 }

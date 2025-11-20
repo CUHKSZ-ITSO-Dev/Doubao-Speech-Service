@@ -2,6 +2,7 @@ package transcription
 
 import (
 	"context"
+	"mime/multipart"
 	"sync"
 
 	v1 "doubao-speech-service/api/transcription/v1"
@@ -31,13 +32,14 @@ func (c *ControllerV1) FileUpload(ctx context.Context, req *v1.FileUploadReq) (r
 	resultCh := make(chan FileUploadResult, len(uploadFiles))
 	semaphore := make(chan struct{}, 3) // 限制并发数量
 
+	userID := g.RequestFromCtx(ctx).Header.Get("X-User-ID")
 	for _, file := range uploadFiles {
 		wg.Add(1)
 		go func(file *ghttp.UploadFile) {
 			defer wg.Done()
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
-			resultCh <- c.processFileUpload(ctx, file, g.RequestFromCtx(ctx).Header.Get("X-User-ID"))
+			resultCh <- processFileUpload(ctx, &httpUploadSource{file: file}, userID)
 		}(file)
 	}
 
@@ -76,13 +78,41 @@ type FileUploadResult struct {
 	Error    error
 }
 
+// UploadSource 抽象上传文件来源，便于复用上传逻辑。
+type UploadSource interface {
+	FileName() string
+	FileSize() int64
+	Open() (multipart.File, error)
+}
+
+type httpUploadSource struct {
+	file *ghttp.UploadFile
+}
+
+func (h *httpUploadSource) FileName() string {
+	return h.file.Filename
+}
+
+func (h *httpUploadSource) FileSize() int64 {
+	return h.file.Size
+}
+
+func (h *httpUploadSource) Open() (multipart.File, error) {
+	return h.file.Open()
+}
+
+// ProcessFileUpload 将音频文件上传至 TOS 并写入数据库，外部可复用。
+func ProcessFileUpload(ctx context.Context, file UploadSource, upn string) FileUploadResult {
+	return processFileUpload(ctx, file, upn)
+}
+
 // processFileUpload 处理单个文件的上传
-func (c *ControllerV1) processFileUpload(ctx context.Context, file *ghttp.UploadFile, upn string) FileUploadResult {
+func processFileUpload(ctx context.Context, file UploadSource, upn string) FileUploadResult {
 	result := FileUploadResult{
-		FileName: file.Filename,
+		FileName: file.FileName(),
 	}
-	if file.Size >= consts.MaxUploadSize {
-		result.Error = gerror.Newf("文件大小超过最大限制：%d / 1,073,741,824 字节", file.Size)
+	if file.FileSize() >= consts.MaxUploadSize {
+		result.Error = gerror.Newf("文件大小超过最大限制：%d / 1,073,741,824 字节", file.FileSize())
 		return result
 	}
 
@@ -118,10 +148,10 @@ func (c *ControllerV1) processFileUpload(ctx context.Context, file *ghttp.Upload
 		"request_id": fileID,
 		"owner":      upn,
 		"file_info": g.Map{
-			"object_key": fileID + "/" + file.Filename,
-			"filename":   file.Filename,
+			"object_key": fileID + "/" + file.FileName(),
+			"filename":   file.FileName(),
 			"file_type":  mType.Extension(),
-			"file_size":  file.Size,
+			"file_size":  file.FileSize(),
 		},
 		"status": "pending",
 	}).Insert(); err != nil {
@@ -131,7 +161,7 @@ func (c *ControllerV1) processFileUpload(ctx context.Context, file *ghttp.Upload
 
 	// 上传到TOS
 	tosC := volcengine.GetClient()
-	key := fileID + "/" + file.Filename
+	key := fileID + "/" + file.FileName()
 	if _, err = tosC.PutObjectV2(ctx, &tos.PutObjectV2Input{
 		PutObjectBasicInput: tos.PutObjectBasicInput{
 			Bucket: g.Cfg().MustGet(ctx, "volc.tos.bucket").String(),
@@ -173,8 +203,8 @@ func (c *ControllerV1) processFileUpload(ctx context.Context, file *ghttp.Upload
 		FileID:   fileID,
 		FileURL:  url.SignedUrl,
 		FileType: mType.Extension(),
-		FileSize: file.Size,
-		FileName: file.Filename,
+		FileSize: file.FileSize(),
+		FileName: file.FileName(),
 	}
 
 	return result

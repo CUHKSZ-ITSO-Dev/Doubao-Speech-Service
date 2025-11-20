@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS transcription (
     task_id TEXT,
     request_id TEXT NOT NULL,
     owner TEXT NOT NULL,
-    file_info JSON,
+    file_info JSONB,
     status TEXT NOT NULL,
     task_params JSON,
     audio_transcription_file JSON,

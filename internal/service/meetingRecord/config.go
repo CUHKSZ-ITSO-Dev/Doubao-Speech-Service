@@ -9,13 +9,12 @@ import (
 )
 
 type recordOptions struct {
-	Dir               string
-	MaxBytes          int64
-	UploadEndpoint    string
-	UploadConcurrency int
-	SampleRate        int
-	Channels          int
-	BitsPerSample     int
+	Dir             string
+	MaxBytes        int64
+	UploadQueueSize int
+	SampleRate      int
+	Channels        int
+	BitsPerSample   int
 }
 
 var (
@@ -29,13 +28,12 @@ var (
 func Init(ctx context.Context) error {
 	cfg := g.Cfg()
 	opts := recordOptions{
-		Dir:               cfg.MustGet(ctx, "meeting.record.dir").String(),
-		MaxBytes:          cfg.MustGet(ctx, "meeting.record.maxBytes").Int64(),
-		UploadEndpoint:    cfg.MustGet(ctx, "meeting.record.upload.endpoint").String(),
-		UploadConcurrency: cfg.MustGet(ctx, "meeting.record.upload.concurrency").Int(),
-		SampleRate:        cfg.MustGet(ctx, "meeting.record.sampleRate").Int(),
-		Channels:          cfg.MustGet(ctx, "meeting.record.channels").Int(),
-		BitsPerSample:     cfg.MustGet(ctx, "meeting.record.bitsPerSample").Int(),
+		Dir:             cfg.MustGet(ctx, "meeting.record.dir").String(),
+		MaxBytes:        cfg.MustGet(ctx, "meeting.record.maxBytes").Int64(),
+		UploadQueueSize: cfg.MustGet(ctx, "meeting.record.upload.queueSize").Int(),
+		SampleRate:      cfg.MustGet(ctx, "meeting.record.sampleRate").Int(),
+		Channels:        cfg.MustGet(ctx, "meeting.record.channels").Int(),
+		BitsPerSample:   cfg.MustGet(ctx, "meeting.record.bitsPerSample").Int(),
 	}
 
 	if opts.SampleRate == 0 {
@@ -53,16 +51,16 @@ func Init(ctx context.Context) error {
 			return err
 		}
 	}
-	if opts.UploadConcurrency <= 0 {
-		opts.UploadConcurrency = 1
+	if opts.UploadQueueSize <= 0 {
+		opts.UploadQueueSize = 1
 	}
 
 	optionsMu.Lock()
 	options = opts
 	optionsMu.Unlock()
 
-	if opts.UploadEndpoint != "" && uploadQueue == nil {
-		uploadQueue = make(chan RecordingResult, opts.UploadConcurrency*2+2)
+	if uploadQueue == nil {
+		uploadQueue = make(chan RecordingResult, opts.UploadQueueSize*2+2)
 		startUploadWorkers(ctx, opts)
 	}
 	return nil

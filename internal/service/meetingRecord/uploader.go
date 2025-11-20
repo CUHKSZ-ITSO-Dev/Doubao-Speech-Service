@@ -17,7 +17,7 @@ var uploadOnce sync.Once
 
 func startUploadWorkers(ctx context.Context, opts recordOptions) {
 	uploadOnce.Do(func() {
-		for i := 0; i < opts.UploadConcurrency; i++ {
+		for i := 0; i < opts.UploadQueueSize; i++ {
 			go uploadWorker(ctx)
 		}
 	})

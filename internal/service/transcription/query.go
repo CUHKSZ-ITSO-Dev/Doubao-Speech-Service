@@ -11,6 +11,7 @@ import (
 	"github.com/gogf/gf/v2/encoding/gjson"
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
+	"github.com/gogf/gf/v2/text/gstr"
 	"github.com/gogf/gf/v2/util/gconv"
 )
 
@@ -56,17 +57,33 @@ func Query(ctx context.Context, taskId string, requestId string) (string, error)
 	}
 	defer r.Close()
 
+	bodyStr := r.ReadAllString()
 	if r.Response.Header.Get("X-Api-Message") != "OK" {
+		statusCode := r.Response.Header.Get("X-Api-Status-Code")
+		logid := r.Response.Header.Get("X-Tt-Logid")
+		bodyPreview := bodyStr
+		if len(bodyPreview) > 500 {
+			bodyPreview = gstr.SubStr(bodyPreview, 0, 500) + "..."
+		}
+		g.Log().Errorf(ctx, "[%s] 任务 %s 查询失败。StatusCode=%s Message=%s Mapped=%s Logid=%s Body=%s",
+			requestId,
+			taskId,
+			statusCode,
+			r.Response.Header.Get("X-Api-Message"),
+			consts.GetErrMsg(ctx, statusCode),
+			logid,
+			bodyPreview,
+		)
 		return "", gerror.Newf(
-			"第三方服务通知任务处理失败。错误码：%s，错误信息：%s。Logid：%s",
-			r.Response.Header.Get("X-Api-Error-Message"),
-			consts.GetErrMsg(ctx, r.Response.Header.Get("X-Api-Error-Message")),
-			r.Response.Header.Get("X-Tt-Logid"),
+			"第三方服务返回非OK。StatusCode=%s Message=%s Logid=%s",
+			statusCode,
+			r.Response.Header.Get("X-Api-Message"),
+			logid,
 		)
 	}
 
 	var queryRes *QueryRes
-	if err = gconv.Struct(r.ReadAllString(), &queryRes); err != nil {
+	if err = gconv.Struct(bodyStr, &queryRes); err != nil {
 		return "", gerror.Wrap(err, "返回结果格式化失败")
 	}
 	if queryRes.Data.Status != "success" {

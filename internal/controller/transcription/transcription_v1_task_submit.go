@@ -11,6 +11,7 @@ import (
 	"github.com/gogf/gf/v2/encoding/gjson"
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
+	"github.com/gogf/gf/v2/text/gstr"
 )
 
 // TaskSubmit 任务提交接口
@@ -61,22 +62,38 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 			submitReq,
 		)
 	if err != nil {
-		response.RawDump()
+		if response != nil {
+			response.RawDump()
+		}
 		return nil, gerror.Wrap(err, "提交任务失败，POST 请求发生错误")
 	}
 	defer response.Close()
 
 	// 解析响应
+	bodyStr := response.ReadAllString()
 	if response.Response.Header.Get("X-Api-Message") != "OK" {
-		return nil, gerror.Newf(
-			"第三方服务通知任务提交失败。错误码：%s，错误信息：%s。Logid：%s",
-			response.Response.Header.Get("X-Api-Error-Message"),
-			consts.GetErrMsg(ctx, response.Response.Header.Get("X-Api-Error-Message")),
-			response.Response.Header.Get("X-Tt-Logid"),
+		statusCode := response.Response.Header.Get("X-Api-Status-Code")
+		logid := response.Response.Header.Get("X-Tt-Logid")
+		bodyPreview := bodyStr
+		if len(bodyPreview) > 500 {
+			bodyPreview = gstr.SubStr(bodyPreview, 0, 500) + "..."
+		}
+		g.Log().Errorf(ctx, "[%s] 任务提交失败。StatusCode=%s Message=%s Mapped=%s Logid=%s Body=%s",
+			transcriptionRecord["request_id"].String(),
+			statusCode,
+			response.Response.Header.Get("X-Api-Message"),
+			consts.GetErrMsg(ctx, statusCode),
+			logid,
+			bodyPreview,
+		)
+		return nil, gerror.Newf("第三方服务返回非OK。StatusCode=%s Message=%s Logid=%s",
+			statusCode,
+			response.Response.Header.Get("X-Api-Message"),
+			logid,
 		)
 	}
 
-	taskID := gjson.New(response.ReadAllString()).Get("Data.TaskID").String()
+	taskID := gjson.New(bodyStr).Get("Data.TaskID").String()
 
 	// 更新数据库记录
 	_, err = dao.Transcription.Ctx(ctx).

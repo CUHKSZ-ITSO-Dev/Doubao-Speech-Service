@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"doubao-speech-service/internal/service/media"
 )
 
 var (
@@ -33,6 +35,7 @@ type Recorder struct {
 	sampleRate    int
 	bitsPerSample int
 	channels      int
+	converter     media.FormatConverter
 }
 
 // RecordingResult 提供录音文件的元数据，供上传流程使用。
@@ -77,6 +80,7 @@ func NewRecorder(ctx context.Context, connectID string) (*Recorder, error) {
 		sampleRate:    opts.SampleRate,
 		bitsPerSample: opts.BitsPerSample,
 		channels:      opts.Channels,
+		converter:     getConverter(),
 	}, nil
 }
 
@@ -132,11 +136,24 @@ func (r *Recorder) Finalize() (*RecordingResult, error) {
 		return nil, err
 	}
 
+	finalPath := r.wavPath
+	if r.converter != nil {
+		convertedPath, err := r.converter.Convert(r.ctx, r.wavPath)
+		if err != nil {
+			return nil, err
+		}
+		finalPath = convertedPath
+	}
+	info, err := os.Stat(finalPath)
+	if err != nil {
+		return nil, err
+	}
+
 	return &RecordingResult{
 		ConnectID: r.connectID,
-		FilePath:  r.wavPath,
+		FilePath:  finalPath,
 		Dir:       r.dir,
-		Size:      r.total,
+		Size:      info.Size(),
 		StartedAt: r.startTime,
 		EndedAt:   time.Now(),
 	}, nil

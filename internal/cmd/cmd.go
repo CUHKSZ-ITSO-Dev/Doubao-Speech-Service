@@ -4,13 +4,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
 	"github.com/gogf/gf/v2/os/gcmd"
 	"github.com/gogf/gf/v2/os/gctx"
+
+	"github.com/golang-migrate/migrate/v4"
+	// 导入数据库驱动
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	// 导入迁移文件源
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+
 	"github.com/gorilla/websocket"
 
 	"doubao-speech-service/internal/controller/transcription"
@@ -36,6 +46,32 @@ var (
 			fmt.Println("Doubao Speech Microservice")
 			fmt.Println("Copyright 2025 The Chinese University of Hong Kong, Shenzhen")
 			fmt.Println()
+
+			// 将 GoFrame 格式转换为标准的 PostgreSQL 连接字符串
+			gfLink := g.Cfg().MustGet(ctx, "database.default.link").String()
+			pgLink := convertGoFrameLinkToPostgres(gfLink)
+
+			m, err := migrate.New(
+				"file://./manifest/migrations/postgres",
+				pgLink,
+			)
+			if err != nil {
+				log.Fatalf("创建migrate实例失败: %v", err)
+			}
+
+			// 执行所有升级迁移
+			if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+				log.Fatalf("执行迁移失败: %v", err)
+			}
+
+			// 获取当前版本
+			version, dirty, err := m.Version()
+			if err != nil && err != migrate.ErrNilVersion {
+				log.Fatalf("获取版本失败: %v", err)
+			}
+
+			fmt.Printf("当前数据库版本: %d, 是否处于脏状态: %t\n", version, dirty)
+
 			s := g.Server()
 			if err := meetingRecordSvc.Init(ctx); err != nil {
 				g.Log().Warningf(ctx, "meeting record service init failed: %v", err)
@@ -207,4 +243,41 @@ func isNormalClosure(err error) bool {
 		return true
 	}
 	return false
+}
+
+// convertGoFrameLinkToPostgres 将 GoFrame 格式的数据库连接字符串转换为标准的 PostgreSQL 连接字符串
+// GoFrame 格式: pgsql:username:password@tcp(host:port)/dbname?params
+// 标准格式: postgres://username:password@host:port/dbname?params
+func convertGoFrameLinkToPostgres(gfLink string) string {
+	// 如果已经是标准格式，直接返回
+	if strings.HasPrefix(gfLink, "postgres://") || strings.HasPrefix(gfLink, "postgresql://") {
+		return gfLink
+	}
+
+	// 解析 GoFrame 格式: pgsql:username:password@tcp(host:port)/dbname?params
+	// 正则表达式匹配: type:username:password@protocol(host:port)/dbname?params
+	re := regexp.MustCompile(`^(\w+):([^:]+):([^@]+)@(\w+)\(([^)]+)\)/([^?]+)(\?.*)?$`)
+	matches := re.FindStringSubmatch(gfLink)
+	if len(matches) != 8 {
+		// 如果解析失败，尝试直接使用（可能是其他格式）
+		return gfLink
+	}
+
+	dbType := matches[1]
+	username := matches[2]
+	password := matches[3]
+	_ = matches[4] // protocol (tcp), not used
+	hostPort := matches[5]
+	dbname := matches[6]
+	params := matches[7]
+
+	// 只处理 pgsql 类型
+	if dbType != "pgsql" && dbType != "postgres" {
+		return gfLink
+	}
+
+	// 忽略协议（tcp），直接使用 host:port
+	// 构建标准 PostgreSQL 连接字符串
+	result := fmt.Sprintf("postgres://%s:%s@%s/%s%s", username, password, hostPort, dbname, params)
+	return result
 }

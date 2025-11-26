@@ -77,3 +77,9 @@ type ListReq struct {
 	g.Meta `path:"/list" method:"get" summary:"任务查询"`
 }
 type ListRes []entity.Transcription
+
+type SearchReq struct {
+	g.Meta  `path:"/search" method:"get" summary:"任务搜索"`
+	Keyword string `json:"keyword" v:"required" dc:"关键词"`
+}
+type SearchRes []entity.Transcription

@@ -4,16 +4,15 @@ import (
 	"context"
 	"sync"
 
-	v1 "doubao-speech-service/api/transcription/v1"
-	"doubao-speech-service/internal/service/volcengine"
-
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
+
+	v1 "doubao-speech-service/api/transcription/v1"
+	"doubao-speech-service/internal/service/volcengine"
 )
 
-// FileUpload 文件上传接口（支持单文件和多文件）
-func (c *ControllerV1) FileUpload(ctx context.Context, req *v1.FileUploadReq) (res *v1.FileUploadRes, err error) {
+func (c *ControllerV1) UploadFile(ctx context.Context, req *v1.UploadFileReq) (res *v1.UploadFileRes, err error) {
 	// 获取上传的文件 - 支持多种方式
 	uploadFiles := g.RequestFromCtx(ctx).GetUploadFiles("files")
 	if uploadFiles == nil {
@@ -56,7 +55,7 @@ func (c *ControllerV1) FileUpload(ctx context.Context, req *v1.FileUploadReq) (r
 		}
 	}
 
-	return &v1.FileUploadRes{
+	return &v1.UploadFileRes{
 		Files:   successFiles,
 		Errors:  errorFiles,
 		Total:   len(uploadFiles),

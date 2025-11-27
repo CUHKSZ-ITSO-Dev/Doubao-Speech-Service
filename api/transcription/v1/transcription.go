@@ -131,3 +131,12 @@ type QueryTaskListReq struct {
 type QueryTaskListRes struct {
 	TaskMetas []TaskMeta `json:"taskMetas" dc:"任务元数据列表"`
 }
+
+type GetFileURLReq struct {
+	g.Meta    `path:"/task/{request_id}/file" method:"get" summary:"获取文件URL"`
+	RequestId string `json:"request_id" v:"required" dc:"请求ID"`
+}
+
+type GetFileURLRes struct {
+	FileURL string `json:"file_url" dc:"文件URL"`
+}

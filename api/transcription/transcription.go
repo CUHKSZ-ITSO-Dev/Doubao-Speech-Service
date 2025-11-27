@@ -18,4 +18,5 @@ type ITranscriptionV1 interface {
 	GetTask(ctx context.Context, req *v1.GetTaskReq) (res *v1.GetTaskRes, err error)
 	DeleteTask(ctx context.Context, req *v1.DeleteTaskReq) (res *v1.DeleteTaskRes, err error)
 	QueryTaskList(ctx context.Context, req *v1.QueryTaskListReq) (res *v1.QueryTaskListRes, err error)
+	GetFileURL(ctx context.Context, req *v1.GetFileURLReq) (res *v1.GetFileURLRes, err error)
 }

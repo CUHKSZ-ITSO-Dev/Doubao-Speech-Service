@@ -32,7 +32,7 @@ func (c *ControllerV1) Search(ctx context.Context, req *v1.SearchReq) (res *v1.S
 
 	cols := dao.Transcription.Columns()
 	condition := fmt.Sprintf(
-		"(LOWER(%s) LIKE ? OR LOWER(%s) LIKE ? OR LOWER(%s) LIKE ? OR LOWER(COALESCE(%s->>'filename', '')) LIKE ?)",
+		"(LOWER(%s) LIKE ? OR LOWER(%s) LIKE ? OR LOWER(COALESCE(%s->>'filename', '')) LIKE ?)",
 		cols.RequestId, cols.Status, cols.FileInfo,
 	)
 

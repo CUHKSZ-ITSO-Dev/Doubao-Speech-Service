@@ -41,7 +41,7 @@ func (c *ControllerV1) UploadFile(ctx context.Context, req *v1.UploadFileReq) (r
 	}()
 
 	// 收集处理结果
-	var successFiles []v1.FileInfo
+	var successTaskMetas []v1.TaskMeta
 	var errorFiles []v1.FileError
 
 	for result := range resultCh {
@@ -51,15 +51,15 @@ func (c *ControllerV1) UploadFile(ctx context.Context, req *v1.UploadFileReq) (r
 				Error:    result.Error.Error(),
 			})
 		} else {
-			successFiles = append(successFiles, result.FileInfo)
+			successTaskMetas = append(successTaskMetas, result.TaskMeta)
 		}
 	}
 
 	return &v1.UploadFileRes{
-		Files:   successFiles,
-		Errors:  errorFiles,
-		Total:   len(uploadFiles),
-		Success: len(successFiles),
-		Failed:  len(errorFiles),
+		TaskMetas: successTaskMetas,
+		Errors:    errorFiles,
+		Total:     len(uploadFiles),
+		Success:   len(successTaskMetas),
+		Failed:    len(errorFiles),
 	}, nil
 }

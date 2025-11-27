@@ -11,11 +11,11 @@ type UploadFileReq struct {
 	g.Meta `path:"/file/upload" method:"post" summary:"上传文件" dc:"使用 multipart/form-data 方式上传（可批量，并行处理）。字段名是 files。"`
 }
 type UploadFileRes struct {
-	Files   []FileInfo  `json:"files" dc:"成功上传的文件列表"`
-	Errors  []FileError `json:"errors,omitempty" dc:"上传失败的文件错误信息"`
-	Total   int         `json:"total" dc:"总文件数"`
-	Success int         `json:"success" dc:"成功上传数"`
-	Failed  int         `json:"failed" dc:"上传失败数"`
+	TaskMetas []TaskMeta  `json:"taskMetas" dc:"成功上传的任务元数据列表"`
+	Errors    []FileError `json:"errors,omitempty" dc:"上传失败的文件错误信息"`
+	Total     int         `json:"total" dc:"总文件数"`
+	Success   int         `json:"success" dc:"成功上传数"`
+	Failed    int         `json:"failed" dc:"上传失败数"`
 }
 type FileInfo struct {
 	FileID   string `json:"file_id" dc:"文件唯一标识"`

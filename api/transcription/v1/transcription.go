@@ -105,6 +105,7 @@ type GetTaskListRes struct {
 type SearchReq struct {
 	g.Meta  `path:"/search" method:"get" summary:"搜索任务"`
 	Keyword string `json:"keyword" v:"required" dc:"关键词"`
+	Limit   int    `json:"limit" d:"20" v:"min:1|max:100" dc:"返回条数，默认20，最大100"`
 }
 
 type SearchRes []TaskMeta

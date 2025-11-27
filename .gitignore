@@ -1,5 +1,6 @@
 .buildpath
 .cache/
+.gocache/
 .hgignore.swp
 .project
 .orig

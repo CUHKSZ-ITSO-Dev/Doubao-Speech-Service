@@ -31,14 +31,12 @@ type FileError struct {
 
 // 任务提交API
 type TaskSubmitReq struct {
-	g.Meta `path:"/task/submit" method:"post" summary:"提交任务"`
-	FileID string           `json:"FileID" v:"required" dc:"文件ID，通过文件上传API获得"`
-	Params TaskSubmitParams `json:"Params" v:"required" dc:"任务参数"`
+	g.Meta    `path:"/task/submit" method:"post" summary:"提交任务"`
+	RequestId string           `json:"RequestId" v:"required" dc:"请求ID，通过文件上传API获得"`
+	Params    TaskSubmitParams `json:"Params" v:"required" dc:"任务参数"`
 }
 type TaskSubmitRes struct {
-	TaskID    string `json:"task_id" dc:"任务ID"`
-	RequestID string `json:"request_id" dc:"请求ID"`
-	Status    string `json:"status" dc:"任务状态"`
+	Status string `json:"status" dc:"任务状态"`
 }
 type TaskSubmitParams struct {
 	AllActivate bool   `json:"AllActivate" v:"required" dc:"是否打包计费。[非全功能使用，具体功能需设置设对应功能属性为true]"`
@@ -111,16 +109,25 @@ type SearchReq struct {
 type SearchRes []TaskMeta
 
 type GetTaskReq struct {
-	g.Meta `path:"/task/{task_id}" resEg:"resource/interface/transcription/get_task_res.json" method:"get" summary:"获取任务详情"`
-	TaskID string `json:"task_id" v:"required" dc:"任务ID"`
+	g.Meta    `path:"/task/{request_id}" resEg:"resource/interface/transcription/get_task_res.json" method:"get" summary:"获取任务详情"`
+	RequestId string `json:"request_id" v:"required" dc:"请求ID"`
 }
 
 type GetTaskRes Task
 
 type DeleteTaskReq struct {
-	g.Meta `path:"/task/{task_id}" method:"delete" summary:"删除任务"`
-	TaskID string `json:"task_id" v:"required" dc:"任务ID"`
+	g.Meta    `path:"/task/{request_id}" method:"delete" summary:"删除任务"`
+	RequestId string `json:"request_id" v:"required" dc:"请求ID"`
 }
 type DeleteTaskRes struct {
 	Success bool `json:"success" dc:"是否删除成功"`
+}
+
+type QueryTaskListReq struct {
+	g.Meta     `path:"/task/query" method:"get" summary:"批量查询任务"`
+	RequestIDs []string `json:"request_ids" v:"required" dc:"请求ID列表"`
+}
+
+type QueryTaskListRes struct {
+	TaskMetas []TaskMeta `json:"taskMetas" dc:"任务元数据列表"`
 }

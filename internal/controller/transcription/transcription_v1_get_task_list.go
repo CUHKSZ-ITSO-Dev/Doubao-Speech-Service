@@ -2,13 +2,14 @@ package transcription
 
 import (
 	"context"
-	v1 "doubao-speech-service/api/transcription/v1"
-	"doubao-speech-service/internal/dao"
 	"fmt"
 
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
+
+	v1 "doubao-speech-service/api/transcription/v1"
+	"doubao-speech-service/internal/dao"
 )
 
 func (c *ControllerV1) GetTaskList(ctx context.Context, req *v1.GetTaskListReq) (res *v1.GetTaskListRes, err error) {

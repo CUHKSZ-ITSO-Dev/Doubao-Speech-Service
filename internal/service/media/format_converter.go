@@ -11,10 +11,6 @@ import (
 	"strings"
 )
 
-type FormatConverter interface {
-	Convert(ctx context.Context, inputPath string) (string, error)
-}
-
 // 转换选项
 type ConvertOptions struct {
 	TargetFormat string   // e.g. "ogg", "mp3"

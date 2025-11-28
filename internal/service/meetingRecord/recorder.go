@@ -3,6 +3,7 @@ package meetingRecord
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,6 +15,15 @@ import (
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 )
+
+var (
+	ErrRecorderDisabled = errors.New("recorder disabled")
+)
+
+// IsRecorderDisabled 检查错误是否为录音器被禁用错误
+func IsRecorderDisabled(err error) bool {
+	return errors.Is(err, ErrRecorderDisabled)
+}
 
 // Recorder 按连接记录客户端发送的音频帧。
 type Recorder struct {
@@ -32,7 +42,7 @@ type Recorder struct {
 	sampleRate    int
 	bitsPerSample int
 	channels      int
-	converter     media.FormatConverter
+	converter     *media.FFmpegConverter
 }
 
 // RecordingResult 提供录音文件的元数据，供上传流程使用。
@@ -49,7 +59,7 @@ type RecordingResult struct {
 func NewRecorder(ctx context.Context, connectID string) (*Recorder, error) {
 	opts := getOptions()
 	if opts.Dir == "" {
-		return nil, gerror.New("录音器被禁用")
+		return nil, ErrRecorderDisabled
 	}
 	now := time.Now()
 	formattedDate := now.Format("20060102")
@@ -135,11 +145,13 @@ func (r *Recorder) Finalize() (*RecordingResult, error) {
 
 	finalPath := r.wavPath
 	if r.converter != nil {
-		convertedPath, err := r.converter.Convert(r.ctx, r.wavPath)
-		if err != nil {
-			return nil, gerror.Wrap(err, "转换文件失败")
+		// 提交转换任务到队列，等待结果
+		resultCh := submitConvertTask(r.ctx, r.wavPath)
+		result := <-resultCh
+		if result.err != nil {
+			return nil, gerror.Wrap(result.err, "转换文件失败")
 		}
-		finalPath = convertedPath
+		finalPath = result.path
 	}
 	info, err := os.Stat(finalPath)
 	if err != nil {

@@ -36,9 +36,6 @@ var (
 			fmt.Println("Copyright 2025 The Chinese University of Hong Kong, Shenzhen")
 			fmt.Println()
 			s := g.Server()
-			if err := meetingRecordSvc.Init(ctx); err != nil {
-				g.Log().Warningf(ctx, "meeting record service init failed: %v", err)
-			}
 			s.SetPort(g.Cfg().MustGet(ctx, "server.port").Int())
 			s.SetClientMaxBodySize(1024 * 1024 * 1024)
 			s.Use(middlewares.BrotliMiddleware)
@@ -159,7 +156,7 @@ func setupWebSocketHandler(ctx context.Context, s *ghttp.Server) *ghttp.Server {
 		}
 
 		recorder, err := meetingRecordSvc.NewRecorder(ctx, traceID)
-		if err != nil && err.Error() != "recorder disabled" {
+		if err != nil && !meetingRecordSvc.IsRecorderDisabled(err) {
 			g.Log().Warningf(ctx, "录音初始化失败，connect_id=%s: %v", traceID, err)
 		}
 
@@ -202,8 +199,5 @@ func setupWebSocketHandler(ctx context.Context, s *ghttp.Server) *ghttp.Server {
 }
 
 func isNormalClosure(err error) bool {
-	if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseNoStatusReceived, websocket.CloseGoingAway) {
-		return true
-	}
-	return false
+	return websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseNoStatusReceived, websocket.CloseGoingAway)
 }

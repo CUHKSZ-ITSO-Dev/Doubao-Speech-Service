@@ -65,3 +65,66 @@ CREATE INDEX idx_transcription_owner ON transcription(owner);
 ```
 3. 火山云的相关 Key 已经封装在二进制文件里面
 4. 后端服务在 8500 端口上启动
+
+## 数据库迁移
+
+该项目使用 `golang-migrate` 工具进行数据库迁移。
+在程序入口处会自动使用当前配置的数据库执行所有升级迁移，并打印当前迁移版本。
+
+### 目录结构
+```
+/项目根目录
+  └── manifest
+      └── migrations         # 迁移脚本目录
+          ├── postgres       # PostgreSQL迁移脚本
+          ├── [版本前缀]_[描述].up.sql
+          ├── [版本前缀]_[描述].down.sql
+          ├── ...
+          └── ...
+```
+
+### 迁移脚本
+
+迁移脚本命名规则：
+```
+[版本前缀]_[描述].up.sql
+[版本前缀]_[描述].down.sql
+```
+
+每个迁移版本都包含两个文件：
+up文件（如v0.1.0_create_transcription_table.up.postgres）：包含升级操作，即应用新版本时需要执行的变更，例如创建表、添加字段、创建索引等。
+down文件（如v0.1.0_create_transcription_table.down.postgres）：包含回滚操作，即当需要回滚到上一版本时执行的操作，例如删除表、删除字段、删除索引等。down文件应该是up文件的逆操作，确保可以完全回滚变更。
+
+### 常用命令
+
+1. 创建迁移文件
+```bash
+migrate create -ext sql -dir manifest/migrations/postgres -seq add_transcription_table
+```
+
+2. 执行升级迁移
+```bash
+migrate -path manifest/migrations/postgres -database "postgres://username:password@host:port/dbname?sslmode=disable" up
+```
+
+3. 回滚最近一次迁移
+```bash
+migrate -path migrations/mysql -database "postgres://username:password@host:port/dbname?sslmode=disable" down 1
+```
+
+4. 回滚到特定版本
+```bash
+migrate -path migrations/mysql -database "postgres://username:password@host:port/dbname?sslmode=disable" goto 000001
+```
+
+5. 强制设置版本（在迁移出错后使用）
+```bash
+migrate -path migrations/mysql -database "postgres://username:password@host:port/dbname?sslmode=disable" force 000001
+```
+
+6. 查看当前版本
+```bash
+migrate -path migrations/mysql -database "postgres://username:password@host:port/dbname?sslmode=disable" version
+```
+
+

@@ -5,6 +5,7 @@ import (
 	v1 "doubao-speech-service/api/transcription/v1"
 	"doubao-speech-service/internal/consts"
 	"doubao-speech-service/internal/dao"
+	"doubao-speech-service/internal/model/entity"
 	"mime/multipart"
 	"os"
 	"path/filepath"
@@ -19,7 +20,7 @@ import (
 )
 
 type FileUploadResult struct {
-	FileInfo v1.FileInfo
+	TaskMeta v1.TaskMeta
 	FileName string
 	Error    error
 }
@@ -124,12 +125,23 @@ func ProcessFileUpload(ctx context.Context, file UploadSource, upn string) FileU
 		return result
 	}
 
-	result.FileInfo = v1.FileInfo{
-		FileID:   fileID,
-		FileURL:  url.SignedUrl,
-		FileType: mType.Extension(),
-		FileSize: file.FileSize(),
-		FileName: file.FileName(),
+	var record entity.Transcription
+	if err = dao.Transcription.Ctx(ctx).
+		Where("request_id = ?", fileID).
+		Where("owner = ?", upn).
+		Limit(1).
+		Scan(&record); err != nil {
+		result.Error = gerror.Wrap(err, "查询上传记录失败")
+		return result
+	}
+
+	result.TaskMeta = v1.TaskMeta{
+		RequestId:  record.RequestId,
+		Owner:      record.Owner,
+		FileInfo:   record.FileInfo,
+		Status:     record.Status,
+		TaskParams: record.TaskParams,
+		CreatedAt:  record.CreatedAt,
 	}
 
 	return result

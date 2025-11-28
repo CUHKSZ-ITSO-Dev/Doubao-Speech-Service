@@ -1,0 +1,48 @@
+{
+  "total": 1,
+  "taskMetas": [
+    {
+      "requestId": "4145j3d6-127c-4fd7-bg16-e40f6281268a",
+      "owner": "msazure@link.cuhk.edu.cn",
+      "fileInfo": {
+        "file_size": 2359340,
+        "file_type": ".wav",
+        "filename": "Meeting_20251126085114.wav",
+        "object_key": "4145j3d6-127c-4fd7-bg16-e40f6281268a/Meeting_20251126085114.wav"
+      },
+      "status": "success",
+      "taskParams": {
+        "Input": {
+          "Offline": {
+            "FileType": "audio",
+            "FileURL": "https://www.example.com/file.wav"
+          }
+        },
+        "Params": {
+          "AllActivate": false,
+          "AudioTranscriptionEnable": true,
+          "AudioTranscriptionParams": {
+            "NeedWordTimeSeries": false,
+            "NumberOfSpeaker": 0,
+            "SpeakerIdentification": true
+          },
+          "ChapterEnabled": true,
+          "InformationExtractionEnabled": true,
+          "InformationExtractionParams": {
+            "Types": ["todo_list", "question_answer"]
+          },
+          "SourceLang": "zh_cn",
+          "SummarizationEnabled": true,
+          "SummarizationParams": {
+            "Types": ["summary"]
+          },
+          "TranslationEnable": false,
+          "TranslationParams": {
+            "TargetLang": ""
+          }
+        }
+      },
+      "createdAt": "2025-11-26 16:52:27"
+    }
+  ]
+}

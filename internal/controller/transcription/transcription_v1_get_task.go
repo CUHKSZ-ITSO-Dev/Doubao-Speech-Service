@@ -11,15 +11,9 @@ import (
 
 func (c *ControllerV1) GetTask(ctx context.Context, req *v1.GetTaskReq) (res *v1.GetTaskRes, err error) {
 	res = &v1.GetTaskRes{}
-	transcriptionRecord, err := dao.Transcription.Ctx(ctx).Where("request_id = ?", req.RequestId).One()
+	err = dao.Transcription.Ctx(ctx).Where("request_id = ?", req.RequestId).Scan(&res)
 	if err != nil {
-		return nil, gerror.Wrap(err, "查询任务失败")
+		err = gerror.Wrap(err, "获取任务记录失败")
 	}
-	if transcriptionRecord.IsEmpty() {
-		return nil, gerror.New("任务不存在")
-	}
-	if err = transcriptionRecord.Struct(res); err != nil {
-		return nil, gerror.Wrap(err, "解析任务数据失败")
-	}
-	return res, nil
+	return
 }

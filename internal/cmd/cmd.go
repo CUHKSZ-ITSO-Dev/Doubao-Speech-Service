@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -160,7 +159,7 @@ func setupWebSocketHandler(ctx context.Context, s *ghttp.Server) *ghttp.Server {
 		}
 
 		recorder, err := meetingRecordSvc.NewRecorder(ctx, traceID)
-		if err != nil && !errors.Is(err, meetingRecordSvc.ErrRecorderDisabled) {
+		if err != nil && err.Error() != "recorder disabled" {
 			g.Log().Warningf(ctx, "录音初始化失败，connect_id=%s: %v", traceID, err)
 		}
 

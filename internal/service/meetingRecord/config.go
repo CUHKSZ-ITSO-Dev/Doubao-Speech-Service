@@ -34,23 +34,18 @@ var (
 
 // Init 读取配置，并在需要时启动上传 worker。
 func Init(ctx context.Context) error {
-	cfg := g.Cfg()
-	convertEnabledVar, _ := cfg.Get(ctx, "meeting.record.convert.enabled")
-	convertEnabled := true
-	if convertEnabledVar != nil && !convertEnabledVar.IsNil() {
-		convertEnabled = convertEnabledVar.Bool()
-	}
+	convertEnabled := g.Cfg().MustGet(ctx, "meeting.record.convert.enabled", false).Bool()
 	opts := recordOptions{
-		Dir:             cfg.MustGet(ctx, "meeting.record.dir").String(),
-		MaxBytes:        cfg.MustGet(ctx, "meeting.record.maxBytes").Int64(),
-		UploadQueueSize: cfg.MustGet(ctx, "meeting.record.upload.queueSize").Int(),
-		SampleRate:      cfg.MustGet(ctx, "meeting.record.sampleRate").Int(),
-		Channels:        cfg.MustGet(ctx, "meeting.record.channels").Int(),
-		BitsPerSample:   cfg.MustGet(ctx, "meeting.record.bitsPerSample").Int(),
+		Dir:             g.Cfg().MustGet(ctx, "meeting.record.dir").String(),
+		MaxBytes:        g.Cfg().MustGet(ctx, "meeting.record.maxBytes").Int64(),
+		UploadQueueSize: g.Cfg().MustGet(ctx, "meeting.record.upload.queueSize").Int(),
+		SampleRate:      g.Cfg().MustGet(ctx, "meeting.record.sampleRate").Int(),
+		Channels:        g.Cfg().MustGet(ctx, "meeting.record.channels").Int(),
+		BitsPerSample:   g.Cfg().MustGet(ctx, "meeting.record.bitsPerSample").Int(),
 		ConvertEnabled:  convertEnabled,
-		ConvertFormat:   cfg.MustGet(ctx, "meeting.record.convert.format").String(),
-		ConvertBitrate:  cfg.MustGet(ctx, "meeting.record.convert.bitrate").String(),
-		FFmpegPath:      cfg.MustGet(ctx, "meeting.record.convert.ffmpeg").String(),
+		ConvertFormat:   g.Cfg().MustGet(ctx, "meeting.record.convert.format").String(),
+		ConvertBitrate:  g.Cfg().MustGet(ctx, "meeting.record.convert.bitrate").String(),
+		FFmpegPath:      g.Cfg().MustGet(ctx, "meeting.record.convert.ffmpeg").String(),
 	}
 
 	if opts.SampleRate == 0 {

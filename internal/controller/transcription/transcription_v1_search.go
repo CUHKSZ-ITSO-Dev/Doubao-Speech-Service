@@ -28,17 +28,15 @@ func (c *ControllerV1) Search(ctx context.Context, req *v1.SearchReq) (res *v1.S
 		limit = 100
 	}
 
-	keyword = strings.ToLower(keyword)
-
 	cols := dao.Transcription.Columns()
 	condition := fmt.Sprintf(
-		"(LOWER(%s) LIKE ? OR LOWER(%s) LIKE ? OR LOWER(COALESCE(%s->>'filename', '')) LIKE ?)",
-		cols.RequestId, cols.Status, cols.FileInfo,
+		"(%s ILIKE ? OR COALESCE(%s->>'filename', '') ILIKE ?)",
+		cols.RequestId, cols.FileInfo,
 	)
 
 	if err = dao.Transcription.Ctx(ctx).
 		Where(cols.Owner+" = ?", userID).
-		Where(condition, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%").
+		Where(condition, "%"+keyword+"%", "%"+keyword+"%").
 		OrderDesc(cols.CreatedAt).
 		OrderDesc(cols.Id).
 		Limit(limit).

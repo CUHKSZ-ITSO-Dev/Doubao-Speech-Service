@@ -49,9 +49,6 @@ func NewFFmpegConverter(binPath string, opts ConvertOptions) (*FFmpegConverter, 
 
 // 使用 ffmpeg 将输入文件转换为目标格式
 func (c *FFmpegConverter) Convert(ctx context.Context, inputPath string) (string, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if c == nil {
 		return inputPath, nil
 	}

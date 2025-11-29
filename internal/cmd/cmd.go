@@ -83,12 +83,11 @@ func setupWebSocketHandler(ctx context.Context, s *ghttp.Server) *ghttp.Server {
 
 	s.BindHandler("/doubao-speech-service/ws", func(r *ghttp.Request) {
 		// Upgrade HTTP connection to WebSocket
-		g.Log().Infof(ctx, "r.Header: %v", r.Header)
 		traceID := gctx.CtxId(ctx)
 		userID := r.Header.Get("X-User-ID")
-		r.Response.Write(traceID)
 
 		if userID == "" {
+			g.Log().Warningf(ctx, "Unauthorized request, userID is required")
 			r.Response.WriteJson(g.Map{
 				"code":    http.StatusUnauthorized,
 				"message": "userID is required",

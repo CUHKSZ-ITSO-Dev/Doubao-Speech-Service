@@ -11,7 +11,12 @@ import (
 )
 
 type ITranscriptionV1 interface {
-	FileUpload(ctx context.Context, req *v1.FileUploadReq) (res *v1.FileUploadRes, err error)
+	UploadFile(ctx context.Context, req *v1.UploadFileReq) (res *v1.UploadFileRes, err error)
 	TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (res *v1.TaskSubmitRes, err error)
-	List(ctx context.Context, req *v1.ListReq) (res *v1.ListRes, err error)
+	GetTaskList(ctx context.Context, req *v1.GetTaskListReq) (res *v1.GetTaskListRes, err error)
+	Search(ctx context.Context, req *v1.SearchReq) (res *v1.SearchRes, err error)
+	GetTask(ctx context.Context, req *v1.GetTaskReq) (res *v1.GetTaskRes, err error)
+	DeleteTask(ctx context.Context, req *v1.DeleteTaskReq) (res *v1.DeleteTaskRes, err error)
+	QueryTaskList(ctx context.Context, req *v1.QueryTaskListReq) (res *v1.QueryTaskListRes, err error)
+	GetFileURL(ctx context.Context, req *v1.GetFileURLReq) (res *v1.GetFileURLRes, err error)
 }

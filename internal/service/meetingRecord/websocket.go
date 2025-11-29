@@ -2,6 +2,7 @@ package meetingRecord
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -12,8 +13,9 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func ProxyWebSocket(ctx context.Context, srcName string, src, dst *websocket.Conn, recorder *Recorder, errCh chan<- error) {
+func ProxyWebSocket(ctx context.Context, srcName string, src, dst *websocket.Conn, recorder *Recorder, errCh chan<- error, taskCompleteCh <-chan *RecordingResult, serverFinalReceivedCh chan<- struct{}) {
 	recorderActive := recorder != nil && srcName == "client"
+	waitingForTaskComplete := false
 	var finalErr error
 	defer func() {
 		if errCh != nil {
@@ -24,8 +26,40 @@ func ProxyWebSocket(ctx context.Context, srcName string, src, dst *websocket.Con
 		}
 	}()
 	for {
+		// 如果在等待任务完成，检查是否有任务完成的消息
+		if waitingForTaskComplete && taskCompleteCh != nil {
+			select {
+			case result := <-taskCompleteCh:
+				if result != nil {
+					g.Log().Infof(ctx, "录音任务已完成，准备发送任务信息")
+					if err := sendTaskCompleteMessage(ctx, dst, result); err != nil {
+						g.Log().Warningf(ctx, "发送任务完成消息失败: %v", err)
+					} else {
+						g.Log().Infof(ctx, "任务完成消息已发送，等待客户端确认...")
+					}
+				}
+				waitingForTaskComplete = false
+			default:
+				// 没有任务完成消息，继续处理
+			}
+		}
+
+		// 设置读取超时，避免在等待任务完成时阻塞太久
+		if waitingForTaskComplete {
+			_ = src.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+		} else {
+			_ = src.SetReadDeadline(time.Time{}) // 清除超时
+		}
+
 		msgType, msg, err := src.ReadMessage()
 		if err != nil {
+			// 如果是超时错误且正在等待任务完成，继续循环
+			if waitingForTaskComplete {
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+					continue
+				}
+			}
+
 			finalErr = err
 			if closeErr, ok := err.(*websocket.CloseError); ok {
 				g.Log().Infof(ctx, "%s 连接关闭，code=%d, text=%s", srcName, closeErr.Code, closeErr.Text)
@@ -60,6 +94,23 @@ func ProxyWebSocket(ctx context.Context, srcName string, src, dst *websocket.Con
 			return
 		}
 
+		// 检测客户端 ACK 消息
+		if srcName == "client" && msgType == websocket.BinaryMessage {
+			if frame, err := parseSAUCFrame(msg); err == nil {
+				if frame.header.MessageType == saucMsgTypeClientAck {
+					g.Log().Infof(ctx, "收到客户端ACK确认，准备关闭连接")
+					// 收到客户端确认，可以安全关闭
+					return
+				}
+				// 检查是否是带 FINAL_PACKET 标志的消息
+				if (frame.header.Flags & messageFlagFinalPacket) == messageFlagFinalPacket {
+					g.Log().Infof(ctx, "%s 收到最终音频包，准备结束录音", srcName)
+					waitingForTaskComplete = true
+					recorderActive = false // 停止录音
+				}
+			}
+		}
+
 		if recorderActive && msgType == websocket.BinaryMessage {
 			pcm, handled, err := extractPCMFromFrame(msg)
 			if err != nil {
@@ -77,33 +128,46 @@ func ProxyWebSocket(ctx context.Context, srcName string, src, dst *websocket.Con
 			}
 		}
 
-		// if srcName == "upstream" {
-		// 	// 处理上游消息的日志输出
-		// 	var msgStr string
-		// 	if msgType == websocket.TextMessage {
-		// 		// 文本消息直接使用
-		// 		msgStr = string(msg)
-		// 	} else {
-		// 		msgBytes := msg
-		// 		jsonStart := -1
-		// 		for i, b := range msgBytes {
-		// 			if b == '{' {
-		// 				jsonStart = i
-		// 				break
-		// 			}
-		// 		}
-		// 		if jsonStart >= 0 && jsonStart < len(msgBytes) {
-		// 			msgStr = string(msgBytes[jsonStart:])
-		// 		} else {
-		// 			msgStr = string(msgBytes)
-		// 		}
-		// 	}
-		// 	g.Log().Infof(ctx, msgStr)
-		// }
-
 		if err := dst.WriteMessage(msgType, msg); err != nil {
 			finalErr = err
 			return
 		}
+
+		// 如果这是服务器发来的带有 FINAL_PACKET 标志的消息
+		// 说明服务器已经发送了所有转写结果，可以开始处理录音文件了
+		if srcName == "upstream" && msgType == websocket.BinaryMessage && serverFinalReceivedCh != nil {
+			if frame, err := parseSAUCFrame(msg); err == nil {
+				if frame.header.MessageType == saucMsgTypeFullServerResponse && (frame.header.Flags&messageFlagFinalPacket) == messageFlagFinalPacket {
+					g.Log().Infof(ctx, "服务器已发送最终转写结果，触发录音处理信号")
+					select {
+					case serverFinalReceivedCh <- struct{}{}:
+					default:
+						// 通道已满或已关闭，忽略
+					}
+				}
+			}
+		}
 	}
+}
+
+func sendTaskCompleteMessage(ctx context.Context, conn *websocket.Conn, result *RecordingResult) error {
+	// 构造任务信息
+	taskInfo := g.Map{
+		"taskId":    result.ConnectID,
+		"connectId": result.ConnectID,
+		"filePath":  result.FilePath,
+		"fileSize":  result.Size,
+		"duration":  result.EndedAt.Sub(result.StartedAt).Seconds(),
+		"startedAt": result.StartedAt.Format(time.RFC3339),
+		"endedAt":   result.EndedAt.Format(time.RFC3339),
+	}
+
+	// 序列化任务信息为 JSON
+	payload, err := json.Marshal(taskInfo)
+	if err != nil {
+		return err
+	}
+
+	message := buildSAUCMessage(saucMsgTypeTaskComplete, saucSerializationJSON, saucCompressionNone, 0, payload)
+	return conn.WriteMessage(websocket.BinaryMessage, message)
 }

@@ -161,9 +161,34 @@ func setupWebSocketHandler(ctx context.Context, s *ghttp.Server) *ghttp.Server {
 		}
 
 		errCh := make(chan error, 2)
+		taskCompleteCh := make(chan *meetingRecordSvc.RecordingResult, 1)
+		serverFinalReceivedCh := make(chan struct{}, 1)
 
-		go meetingRecordSvc.ProxyWebSocket(ctx, "client", clientConn, upstreamConn, recorder, errCh)
-		go meetingRecordSvc.ProxyWebSocket(ctx, "upstream", upstreamConn, clientConn, nil, errCh)
+		// 启动处理录音的 goroutine
+		go func() {
+			// 等待服务器最终消息
+			<-serverFinalReceivedCh
+
+			if recorder != nil {
+				g.Log().Infof(ctx, "开始处理录音，connect_id=%s", traceID)
+				if result, err := recorder.Finalize(); err != nil {
+					g.Log().Warningf(ctx, "录音收尾失败，connect_id=%s: %v", traceID, err)
+					close(taskCompleteCh) // 关闭通道表示没有结果
+				} else if result != nil {
+					g.Log().Infof(ctx, "录音处理完成，connect_id=%s, bytes=%d", traceID, result.Size)
+					result.Owner = userID
+					taskCompleteCh <- result
+					close(taskCompleteCh)
+				} else {
+					close(taskCompleteCh) // 关闭通道表示没有结果
+				}
+			} else {
+				close(taskCompleteCh) // 没有录音器，关闭通道
+			}
+		}()
+
+		go meetingRecordSvc.ProxyWebSocket(ctx, "client", clientConn, upstreamConn, recorder, errCh, taskCompleteCh, nil)
+		go meetingRecordSvc.ProxyWebSocket(ctx, "upstream", upstreamConn, clientConn, nil, errCh, nil, serverFinalReceivedCh)
 
 		g.Log().Infof(ctx, "开始会话")
 
@@ -179,15 +204,15 @@ func setupWebSocketHandler(ctx context.Context, s *ghttp.Server) *ghttp.Server {
 			g.Log().Warningf(ctx, "WebSocket 转发通道异常关闭 (second): %v", secondErr)
 		}
 
-		if recorder != nil {
-			// g.Log().Infof(reqCtx, "开始收尾录音，connect_id=%s", connectID)
-			if result, err := recorder.Finalize(); err != nil {
-				g.Log().Warningf(ctx, "录音收尾失败，connect_id=%s: %v", traceID, err)
-			} else if result != nil {
-				g.Log().Infof(ctx, "录音完成，connect_id=%s, bytes=%d", traceID, result.Size)
-				result.Owner = userID
+		// 如果有任务完成的结果，加入上传队列
+		select {
+		case result, ok := <-taskCompleteCh:
+			if ok && result != nil {
+				g.Log().Infof(ctx, "将录音加入上传队列，connect_id=%s", traceID)
 				meetingRecordSvc.EnqueueUpload(ctx, result)
 			}
+		default:
+			// 没有任务完成，可能是非录音场景
 		}
 
 		g.Log().Infof(ctx, "WebSocket 转发完成，connect_id=%s", traceID)

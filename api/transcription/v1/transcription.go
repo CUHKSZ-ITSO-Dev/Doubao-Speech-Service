@@ -1,21 +1,21 @@
 package v1
 
 import (
+	"github.com/gogf/gf/v2/encoding/gjson"
 	"github.com/gogf/gf/v2/frame/g"
-
-	"doubao-speech-service/internal/model/entity"
+	"github.com/gogf/gf/v2/os/gtime"
 )
 
 // 文件上传API（支持单文件和多文件）
-type FileUploadReq struct {
-	g.Meta `path:"/file/upload" method:"post" summary:"文件上传" dc:"使用 multipart/form-data 方式上传（可批量，并行处理）。字段名是 files。"`
+type UploadFileReq struct {
+	g.Meta `path:"/file/upload" method:"post" summary:"上传文件" dc:"使用 multipart/form-data 方式上传（可批量，并行处理）。字段名是 files。"`
 }
-type FileUploadRes struct {
-	Files   []FileInfo  `json:"files" dc:"成功上传的文件列表"`
-	Errors  []FileError `json:"errors,omitempty" dc:"上传失败的文件错误信息"`
-	Total   int         `json:"total" dc:"总文件数"`
-	Success int         `json:"success" dc:"成功上传数"`
-	Failed  int         `json:"failed" dc:"上传失败数"`
+type UploadFileRes struct {
+	TaskMetas []TaskMeta  `json:"taskMetas" dc:"成功上传的任务元数据列表"`
+	Errors    []FileError `json:"errors,omitempty" dc:"上传失败的文件错误信息"`
+	Total     int         `json:"total" dc:"总文件数"`
+	Success   int         `json:"success" dc:"成功上传数"`
+	Failed    int         `json:"failed" dc:"上传失败数"`
 }
 type FileInfo struct {
 	FileID   string `json:"file_id" dc:"文件唯一标识"`
@@ -31,14 +31,12 @@ type FileError struct {
 
 // 任务提交API
 type TaskSubmitReq struct {
-	g.Meta `path:"/task/submit" method:"post" summary:"任务提交"`
-	FileID string           `json:"FileID" v:"required" dc:"文件ID，通过文件上传API获得"`
-	Params TaskSubmitParams `json:"Params" v:"required" dc:"任务参数"`
+	g.Meta    `path:"/task/submit" method:"post" summary:"提交任务"`
+	RequestId string           `json:"RequestId" v:"required" dc:"请求ID，通过文件上传API获得"`
+	Params    TaskSubmitParams `json:"Params" v:"required" dc:"任务参数"`
 }
 type TaskSubmitRes struct {
-	TaskID    string `json:"task_id" dc:"任务ID"`
-	RequestID string `json:"request_id" dc:"请求ID"`
-	Status    string `json:"status" dc:"任务状态"`
+	Status string `json:"status" dc:"任务状态"`
 }
 type TaskSubmitParams struct {
 	AllActivate bool   `json:"AllActivate" v:"required" dc:"是否打包计费。[非全功能使用，具体功能需设置设对应功能属性为true]"`
@@ -73,7 +71,72 @@ type TaskSubmitParams struct {
 	ChapterEnabled bool `json:"ChapterEnabled" dc:"是否开启章节总结"`
 }
 
-type ListReq struct {
-	g.Meta `path:"/list" method:"get" summary:"任务查询"`
+type TaskMeta struct {
+	RequestId  string      `json:"requestId" dc:"请求 ID"`
+	Owner      string      `json:"owner" dc:"拥有者 UPN"`
+	FileInfo   *gjson.Json `json:"fileInfo" dc:"文件信息"`
+	Status     string      `json:"status" dc:"任务状态"`
+	TaskParams *gjson.Json `json:"taskParams" dc:"任务参数"`
+	CreatedAt  *gtime.Time `json:"createdAt" dc:"创建时间"`
 }
-type ListRes []entity.Transcription
+
+type Task struct {
+	TaskMeta
+	AudioTranscriptionFile    *gjson.Json `json:"audioTranscriptionFile" dc:"语音转写信息"`
+	ChapterFile               *gjson.Json `json:"chapterFile" dc:"章节总结信息"`
+	InformationExtractionFile *gjson.Json `json:"informationExtractionFile" dc:"信息提取信息"`
+	SummarizationFile         *gjson.Json `json:"summarizationFile" dc:"全文总结信息"`
+	TranslationFile           *gjson.Json `json:"translationFile" dc:"翻译信息"`
+}
+
+type GetTaskListReq struct {
+	g.Meta        `path:"/list" method:"get" resEg:"resource/interface/transcription/get_task_list_res.json" summary:"获取任务列表"`
+	LastRequestID string `json:"last_request_id" d:"0" dc:"当前列表最后一条数据的RequestID，用于基于该RequestID向后分页"`
+	Limit         int    `json:"limit" d:"10" v:"min:1|max:100" dc:"本次请求返回的数据条数"`
+}
+
+type GetTaskListRes struct {
+	Total     int        `json:"total" dc:"总条目数"`
+	TaskMetas []TaskMeta `json:"taskMetas" dc:"任务列表"`
+}
+
+type SearchReq struct {
+	g.Meta  `path:"/search" method:"get" summary:"搜索任务"`
+	Keyword string `json:"keyword" v:"required" dc:"关键词"`
+	Limit   int    `json:"limit" d:"20" v:"min:1|max:100" dc:"返回条数，默认20，最大100"`
+}
+
+type SearchRes []TaskMeta
+
+type GetTaskReq struct {
+	g.Meta    `path:"/task/{request_id}" resEg:"resource/interface/transcription/get_task_res.json" method:"get" summary:"获取任务详情"`
+	RequestId string `json:"request_id" v:"required" dc:"请求ID"`
+}
+
+type GetTaskRes Task
+
+type DeleteTaskReq struct {
+	g.Meta    `path:"/task/{request_id}" method:"delete" summary:"删除任务"`
+	RequestId string `json:"request_id" v:"required" dc:"请求ID"`
+}
+type DeleteTaskRes struct {
+	Success bool `json:"success" dc:"是否删除成功"`
+}
+
+type QueryTaskListReq struct {
+	g.Meta     `path:"/task/query" method:"get" summary:"批量查询任务"`
+	RequestIDs []string `json:"request_ids" v:"required" dc:"请求ID列表"`
+}
+
+type QueryTaskListRes struct {
+	TaskMetas []TaskMeta `json:"taskMetas" dc:"任务元数据列表"`
+}
+
+type GetFileURLReq struct {
+	g.Meta    `path:"/task/{request_id}/file" method:"get" summary:"获取文件URL"`
+	RequestId string `json:"request_id" v:"required" dc:"请求ID"`
+}
+
+type GetFileURLRes struct {
+	FileURL string `json:"file_url" dc:"文件URL"`
+}

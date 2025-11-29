@@ -17,7 +17,7 @@ import (
 // TaskSubmit 任务提交接口
 func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (res *v1.TaskSubmitRes, err error) {
 	// 验证文件ID是否存在
-	transcriptionRecord, err := dao.Transcription.Ctx(ctx).Where("request_id", req.FileID).One()
+	transcriptionRecord, err := dao.Transcription.Ctx(ctx).Where("request_id", req.RequestId).One()
 	if err != nil {
 		return nil, gerror.Wrap(err, "查询文件信息失败")
 	}
@@ -97,7 +97,7 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 
 	// 更新数据库记录
 	_, err = dao.Transcription.Ctx(ctx).
-		Where("request_id", req.FileID).
+		Where("request_id", req.RequestId).
 		Data(g.Map{
 			"task_id":     taskID,
 			"task_params": submitReq,
@@ -110,8 +110,6 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 	transcription.Polling(taskID, transcriptionRecord["request_id"].String())
 
 	return &v1.TaskSubmitRes{
-		TaskID:    taskID,
-		RequestID: transcriptionRecord["request_id"].String(),
-		Status:    "pending",
+		Status: "pending",
 	}, nil
 }

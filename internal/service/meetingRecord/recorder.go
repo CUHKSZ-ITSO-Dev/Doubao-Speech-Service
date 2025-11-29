@@ -62,8 +62,8 @@ func NewRecorder(ctx context.Context, connectID string) (*Recorder, error) {
 		return nil, ErrRecorderDisabled
 	}
 	now := time.Now()
-	formattedDate := now.Format("20060102")
-	formattedTime := now.Format("20060102150405")
+	formattedDate := now.Format("2006_01_02")
+	formattedTime := now.Format("2006_01_02_150405")
 	dir := filepath.Join(opts.Dir, formattedDate, connectID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, gerror.Wrap(err, "创建目录失败")

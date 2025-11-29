@@ -9,12 +9,21 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"doubao-speech-service/internal/service/media"
+
+	"github.com/gogf/gf/v2/errors/gerror"
+	"github.com/gogf/gf/v2/frame/g"
 )
 
 var (
 	ErrRecorderDisabled = errors.New("recorder disabled")
-	errRecorderClosed   = errors.New("recorder closed")
 )
+
+// IsRecorderDisabled 检查错误是否为录音器被禁用错误
+func IsRecorderDisabled(err error) bool {
+	return errors.Is(err, ErrRecorderDisabled)
+}
 
 // Recorder 按连接记录客户端发送的音频帧。
 type Recorder struct {
@@ -33,6 +42,7 @@ type Recorder struct {
 	sampleRate    int
 	bitsPerSample int
 	channels      int
+	converter     *media.FFmpegConverter
 }
 
 // RecordingResult 提供录音文件的元数据，供上传流程使用。
@@ -56,13 +66,13 @@ func NewRecorder(ctx context.Context, connectID string) (*Recorder, error) {
 	formattedTime := now.Format("2006_01_02_150405")
 	dir := filepath.Join(opts.Dir, formattedDate, connectID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, err
+		return nil, gerror.Wrap(err, "创建目录失败")
 	}
 	fileName := "Meeting_" + formattedTime
 	path := filepath.Join(dir, fileName+".pcm")
 	file, err := os.Create(path)
 	if err != nil {
-		return nil, err
+		return nil, gerror.Wrap(err, "创建文件失败")
 	}
 
 	return &Recorder{
@@ -77,6 +87,7 @@ func NewRecorder(ctx context.Context, connectID string) (*Recorder, error) {
 		sampleRate:    opts.SampleRate,
 		bitsPerSample: opts.BitsPerSample,
 		channels:      opts.Channels,
+		converter:     getConverter(),
 	}, nil
 }
 
@@ -90,21 +101,21 @@ func (r *Recorder) ConnectID() string {
 // Append 写入一帧音频。若超过限制或写入失败，会终止录制。
 func (r *Recorder) Append(frame []byte) error {
 	if r == nil {
-		return ErrRecorderDisabled
+		return gerror.New("录音器被禁用")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed || r.file == nil {
-		return errRecorderClosed
+		return gerror.New("录音器已关闭")
 	}
 	if r.maxBytes > 0 && r.total+int64(len(frame)) > r.maxBytes {
 		r.closeLocked()
-		return errRecorderClosed
+		return gerror.New("录音器已关闭")
 	}
 	n, err := r.file.Write(frame)
 	if err != nil {
 		r.closeLocked()
-		return err
+		return gerror.Wrap(err, "写入文件失败")
 	}
 	r.total += int64(n)
 	return nil
@@ -119,7 +130,7 @@ func (r *Recorder) Finalize() (*RecordingResult, error) {
 	defer r.mu.Unlock()
 	if r.file != nil {
 		if err := r.file.Close(); err != nil {
-			return nil, err
+			return nil, gerror.Wrap(err, "关闭文件失败")
 		}
 		r.file = nil
 	}
@@ -129,14 +140,30 @@ func (r *Recorder) Finalize() (*RecordingResult, error) {
 		return nil, nil
 	}
 	if err := r.flushToWAV(); err != nil {
-		return nil, err
+		return nil, gerror.Wrap(err, "刷新到WAV文件失败")
+	}
+
+	finalPath := r.wavPath
+	if r.converter != nil {
+		// 提交转换任务到队列，等待结果
+		resultCh := submitConvertTask(r.ctx, r.wavPath)
+		result := <-resultCh
+		if result.err != nil {
+			return nil, gerror.Wrap(result.err, "转换文件失败")
+		}
+		finalPath = result.path
+	}
+	info, err := os.Stat(finalPath)
+	if err != nil {
+		g.Log().Criticalf(r.ctx, "获取转换后的文件信息失败: %v。原始地址：%s。目标地址：%s。", err, r.wavPath, finalPath)
+		return nil, gerror.Wrap(err, "获取文件信息失败")
 	}
 
 	return &RecordingResult{
 		ConnectID: r.connectID,
-		FilePath:  r.wavPath,
+		FilePath:  finalPath,
 		Dir:       r.dir,
-		Size:      r.total,
+		Size:      info.Size(),
 		StartedAt: r.startTime,
 		EndedAt:   time.Now(),
 	}, nil
@@ -169,27 +196,27 @@ func (r *Recorder) closeLocked() {
 func (r *Recorder) flushToWAV() error {
 	src, err := os.Open(r.filePath)
 	if err != nil {
-		return err
+		return gerror.Wrap(err, "打开源文件失败")
 	}
 	defer src.Close()
 
 	dst, err := os.Create(r.wavPath)
 	if err != nil {
-		return err
+		return gerror.Wrap(err, "创建目标文件失败")
 	}
 
 	if err := writeWAVHeader(dst, r.channels, r.sampleRate, r.bitsPerSample, r.total); err != nil {
 		dst.Close()
-		return err
+		return gerror.Wrap(err, "写入WAV头失败")
 	}
 
 	if _, err := io.Copy(dst, src); err != nil {
 		dst.Close()
-		return err
+		return gerror.Wrap(err, "写入WAV数据失败")
 	}
 
 	if err := dst.Close(); err != nil {
-		return err
+		return gerror.Wrap(err, "关闭目标文件失败")
 	}
 	return os.Remove(r.filePath)
 }

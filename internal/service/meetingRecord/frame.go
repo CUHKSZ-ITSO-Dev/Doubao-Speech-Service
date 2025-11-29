@@ -26,12 +26,17 @@ type saucHeader struct {
 const (
 	saucMsgTypeFullClientRequest      = 0x1
 	saucMsgTypeAudioOnlyClientRequest = 0x2
+	saucMsgTypeFullServerResponse     = 0x9
+	saucMsgTypeTaskComplete           = 0xa
+	saucMsgTypeClientAck              = 0xb
 
 	saucSerializationNone = 0x0
 	saucSerializationJSON = 0x1
 
 	saucCompressionNone = 0x0
 	saucCompressionGzip = 0x1
+
+	messageFlagFinalPacket = 0x2 // FINAL_PACKET 标志位
 )
 
 func parseSAUCFrame(data []byte) (*saucFrame, error) {
@@ -99,4 +104,26 @@ func extractPCMFromFrame(data []byte) ([]byte, bool, error) {
 	default:
 		return nil, false, nil
 	}
+}
+
+// buildSAUCMessage 构造 SAUC 协议消息
+func buildSAUCMessage(messageType, serialization, compression, flags uint8, payload []byte) []byte {
+	headerSize := uint8(0x1) // 4 字节
+	payloadSize := uint32(len(payload))
+
+	buffer := make([]byte, 8+len(payload))
+
+	// 构造头部
+	buffer[0] = (0x1 << 4) | headerSize // Protocol version 0x1
+	buffer[1] = (messageType << 4) | (flags & 0x0f)
+	buffer[2] = (serialization << 4) | (compression & 0x0f)
+	buffer[3] = 0x00 // Reserved
+
+	// 写入 payload 大小（大端序）
+	binary.BigEndian.PutUint32(buffer[4:8], payloadSize)
+
+	// 复制 payload
+	copy(buffer[8:], payload)
+
+	return buffer
 }

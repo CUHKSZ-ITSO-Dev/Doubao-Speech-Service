@@ -4,21 +4,18 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sync"
 
 	"github.com/gogf/gf/v2/frame/g"
 
 	"doubao-speech-service/internal/service/volcengine"
 )
 
-var uploadOnce sync.Once
-
+// startUploadWorkers 启动上传 worker goroutines
 func startUploadWorkers(ctx context.Context, opts recordOptions) {
-	uploadOnce.Do(func() {
-		for i := 0; i < opts.UploadQueueSize; i++ {
-			go uploadWorker(ctx)
-		}
-	})
+	for i := 0; i < opts.UploadQueueSize; i++ {
+		go uploadWorker(ctx)
+	}
+	g.Log().Infof(ctx, "started %d upload workers", opts.UploadQueueSize)
 }
 
 func uploadWorker(ctx context.Context) {

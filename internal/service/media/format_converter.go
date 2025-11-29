@@ -9,6 +9,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/gogf/gf/v2/errors/gerror"
+	"github.com/gogf/gf/v2/frame/g"
 )
 
 // 转换选项
@@ -53,10 +56,10 @@ func (c *FFmpegConverter) Convert(ctx context.Context, inputPath string) (string
 		return inputPath, nil
 	}
 	if _, err := os.Stat(inputPath); err != nil {
-		return "", fmt.Errorf("input file not accessible: %w", err)
+		return "", gerror.Wrap(err, "input file not accessible")
 	}
 
-	target := buildTargetPath(inputPath, c.opts.TargetFormat)
+	target := fmt.Sprintf("%s.%s", strings.TrimSuffix(inputPath, filepath.Ext(inputPath)), c.opts.TargetFormat)
 	args := []string{"-y", "-i", inputPath, "-vn"}
 	if c.opts.AudioBitrate != "" {
 		args = append(args, "-b:a", c.opts.AudioBitrate)
@@ -72,24 +75,15 @@ func (c *FFmpegConverter) Convert(ctx context.Context, inputPath string) (string
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		detail := strings.TrimSpace(stderr.String())
-		if detail != "" {
-			err = fmt.Errorf("%w: %s", err, detail)
-		}
-		return "", fmt.Errorf("ffmpeg convert to %s failed: %w", c.opts.TargetFormat, err)
+		return "", gerror.Wrapf(err, "ffmpeg convert to %s failed: %s", c.opts.TargetFormat, strings.TrimSpace(stderr.String()))
 	}
 
 	if c.opts.DeleteInput {
-		_ = os.Remove(inputPath)
+		err := os.Remove(inputPath)
+		if err != nil {
+			// 至少日志告个警
+			g.Log().Errorf(ctx, "remove input file failed: %v", err)
+		}
 	}
 	return target, nil
-}
-
-func buildTargetPath(inputPath, format string) string {
-	format = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(format), "."))
-	if format == "" {
-		return inputPath
-	}
-	base := strings.TrimSuffix(inputPath, filepath.Ext(inputPath))
-	return fmt.Sprintf("%s.%s", base, format)
 }

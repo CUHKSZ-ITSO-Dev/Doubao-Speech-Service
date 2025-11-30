@@ -6,6 +6,7 @@ import (
 	v1 "doubao-speech-service/api/transcription/v1"
 	"doubao-speech-service/internal/consts"
 	"doubao-speech-service/internal/dao"
+	"doubao-speech-service/internal/model/entity"
 	"doubao-speech-service/internal/service/transcription"
 	"doubao-speech-service/internal/service/volcengine"
 
@@ -18,24 +19,21 @@ import (
 // TaskSubmit 任务提交接口
 func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (res *v1.TaskSubmitRes, err error) {
 	// 验证文件ID是否存在
-	transcriptionRecord, err := dao.Transcription.Ctx(ctx).Where("request_id", req.RequestId).One()
-	if err != nil {
-		return nil, gerror.Wrap(err, "查询文件信息失败")
+	userID := g.RequestFromCtx(ctx).Header.Get("X-User-ID")
+	var transRecord *entity.Transcription
+	if err := dao.Transcription.Ctx(ctx).Where("request_id = ?", req.RequestId).Where("owner = ?", userID).Limit(1).Scan(&transRecord); err != nil {
+		return nil, gerror.Wrap(err, "查询任务记录失败")
 	}
-	if transcriptionRecord.IsEmpty() {
-		return nil, gerror.New("文件ID不存在，请先上传文件")
+	if transRecord == nil {
+		return nil, gerror.New("任务记录不存在")
 	}
 
 	// 检查文件状态
-	if transcriptionRecord["status"].String() != "uploaded" {
-		return nil, gerror.Newf("文件状态异常，无法提交任务。当前状态：%s", transcriptionRecord["status"].String())
+	if transRecord.Status != "uploaded" {
+		return nil, gerror.Newf("文件状态异常，无法提交任务。当前状态：%s", transRecord.Status)
 	}
 
 	// 构建提交给第三方API的请求
-	err = volcengine.UpdateFileURL(ctx, req.RequestId) // 先更新文件URL
-	if err != nil {
-		return nil, gerror.Wrap(err, "更新文件URL失败")
-	}
 	submitReq := struct {
 		Input struct {
 			Offline struct {
@@ -46,9 +44,14 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 		Params v1.TaskSubmitParams `json:"Params"`
 	}{}
 
-	if err = transcriptionRecord["task_params"].Struct(&submitReq); err != nil {
+	if err = transRecord.TaskParams.Scan(&submitReq); err != nil {
 		return nil, gerror.Wrap(err, "解析数据库任务参数失败")
 	}
+	submitReq.Input.Offline.FileURL, err = volcengine.GetFileURL(ctx, transRecord)
+	if err != nil {
+		return nil, gerror.Wrap(err, "获取文件URL失败")
+	}
+	g.Log().Infof(ctx, "submitReq: %v", submitReq)
 	submitReq.Params = req.Params
 
 	// 提交任务到第三方API
@@ -58,7 +61,7 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 			"X-Api-App-Key":     g.Cfg().MustGet(ctx, "volc.lark.appid").String(),
 			"X-Api-Access-Key":  g.Cfg().MustGet(ctx, "volc.lark.accessKey").String(),
 			"X-Api-Resource-Id": g.Cfg().MustGet(ctx, "volc.lark.service").String(),
-			"X-Api-Request-Id":  transcriptionRecord["request_id"].String(),
+			"X-Api-Request-Id":  transRecord.RequestId,
 			"X-Api-Sequence":    "-1",
 		}).
 		Post(
@@ -84,7 +87,7 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 			bodyPreview = gstr.SubStr(bodyPreview, 0, 500) + "..."
 		}
 		g.Log().Errorf(ctx, "[%s] 任务提交失败。StatusCode=%s Message=%s Mapped=%s Logid=%s Body=%s",
-			transcriptionRecord["request_id"].String(),
+			transRecord.RequestId,
 			statusCode,
 			response.Response.Header.Get("X-Api-Message"),
 			consts.GetErrMsg(ctx, statusCode),
@@ -112,7 +115,7 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 		return nil, gerror.Wrap(err, "更新任务记录失败")
 	}
 
-	transcription.Polling(taskID, transcriptionRecord["request_id"].String())
+	transcription.Polling(taskID, transRecord.RequestId)
 
 	return &v1.TaskSubmitRes{
 		Status: "pending",

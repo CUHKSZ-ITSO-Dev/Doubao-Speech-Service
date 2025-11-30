@@ -160,11 +160,14 @@ func setupWebSocketHandler(ctx context.Context, s *ghttp.Server) *ghttp.Server {
 		}
 
 		errCh := make(chan error, 2)
-		taskCompleteCh := make(chan *meetingRecordSvc.RecordingResult, 1)
+		taskCompleteCh := make(chan *meetingRecordSvc.RecordingResult, 1)       // for upload enqueue
+		taskCompleteNotifyCh := make(chan *meetingRecordSvc.RecordingResult, 1) // for websocket task-complete notification
 		serverFinalReceivedCh := make(chan struct{}, 1)
 
 		// 启动处理录音的 goroutine
 		go func() {
+			defer close(taskCompleteCh)
+			defer close(taskCompleteNotifyCh)
 			// 等待服务器最终消息
 			<-serverFinalReceivedCh
 
@@ -172,21 +175,23 @@ func setupWebSocketHandler(ctx context.Context, s *ghttp.Server) *ghttp.Server {
 				g.Log().Infof(ctx, "开始处理录音，connect_id=%s", traceID)
 				if result, err := recorder.Finalize(); err != nil {
 					g.Log().Warningf(ctx, "录音收尾失败，connect_id=%s: %v", traceID, err)
-					close(taskCompleteCh) // 关闭通道表示没有结果
 				} else if result != nil {
 					g.Log().Infof(ctx, "录音处理完成，connect_id=%s, bytes=%d", traceID, result.Size)
 					result.Owner = userID
-					taskCompleteCh <- result
-					close(taskCompleteCh)
-				} else {
-					close(taskCompleteCh) // 关闭通道表示没有结果
+					// 将录音结果加入上传队列
+					select {
+					case taskCompleteCh <- result:
+					default:
+					}
+					select {
+					case taskCompleteNotifyCh <- result:
+					default:
+					}
 				}
-			} else {
-				close(taskCompleteCh) // 没有录音器，关闭通道
 			}
 		}()
 
-		go meetingRecordSvc.ProxyWebSocket(ctx, "client", clientConn, upstreamConn, recorder, errCh, taskCompleteCh, clientConn, nil)
+		go meetingRecordSvc.ProxyWebSocket(ctx, "client", clientConn, upstreamConn, recorder, errCh, taskCompleteNotifyCh, clientConn, nil)
 		go meetingRecordSvc.ProxyWebSocket(ctx, "upstream", upstreamConn, clientConn, nil, errCh, nil, nil, serverFinalReceivedCh)
 
 		g.Log().Infof(ctx, "开始会话")

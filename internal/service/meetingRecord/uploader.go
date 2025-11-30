@@ -4,21 +4,18 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sync"
 
 	"github.com/gogf/gf/v2/frame/g"
 
 	"doubao-speech-service/internal/service/volcengine"
 )
 
-var uploadOnce sync.Once
-
+// startUploadWorkers 启动上传 worker goroutines
 func startUploadWorkers(ctx context.Context, opts recordOptions) {
-	uploadOnce.Do(func() {
-		for i := 0; i < opts.UploadQueueSize; i++ {
-			go uploadWorker(ctx)
-		}
-	})
+	for i := 0; i < opts.UploadQueueSize; i++ {
+		go uploadWorker(ctx)
+	}
+	g.Log().Infof(ctx, "started %d upload workers", opts.UploadQueueSize)
 }
 
 func uploadWorker(ctx context.Context) {
@@ -55,7 +52,7 @@ func uploadOne(ctx context.Context, item RecordingResult) error {
 	if err != nil {
 		return err
 	}
-	res := volcengine.ProcessFileUpload(ctx, uploadFile, item.Owner)
+	res := volcengine.ProcessFileUpload(ctx, uploadFile, item.Owner, item.ConnectID)
 	return res.Error
 }
 
@@ -64,10 +61,13 @@ func EnqueueUpload(ctx context.Context, result *RecordingResult) {
 	if result == nil || uploadQueue == nil {
 		return
 	}
+	// 先创建一个数据库记录
+
+	// 提交到上传队列，阻塞直到成功或 context 取消
 	select {
 	case uploadQueue <- *result:
+		g.Log().Infof(ctx, "上传任务已加入队列: %s", result.FilePath)
 	case <-ctx.Done():
-	default:
-		uploadQueue <- *result
+		g.Log().Warningf(ctx, "上下文取消，放弃上传任务: %s", result.FilePath)
 	}
 }

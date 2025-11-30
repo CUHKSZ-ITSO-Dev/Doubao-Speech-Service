@@ -2,57 +2,112 @@ package transcription
 
 import (
 	"context"
-	"sync"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
-	"github.com/gogf/gf/v2/net/ghttp"
+	"github.com/gogf/gf/v2/os/gctx"
 
 	v1 "doubao-speech-service/api/transcription/v1"
-	"doubao-speech-service/internal/service/volcengine"
+	"doubao-speech-service/internal/dao"
+	meetingRecordSvc "doubao-speech-service/internal/service/meetingRecord"
 )
 
 func (c *ControllerV1) UploadFile(ctx context.Context, req *v1.UploadFileReq) (res *v1.UploadFileRes, err error) {
-	// 获取上传的文件 - 支持多种方式
+	// 获取上传的文件
 	uploadFiles := g.RequestFromCtx(ctx).GetUploadFiles("files")
 	if uploadFiles == nil {
 		return nil, gerror.New("上传文件为空，请使用字段名'files'上传文件")
 	}
 
-	// 并发处理多个文件
-	var wg sync.WaitGroup
-	resultCh := make(chan volcengine.FileUploadResult, len(uploadFiles))
-	semaphore := make(chan struct{}, 3) // 限制并发数量
-
 	userID := g.RequestFromCtx(ctx).Header.Get("X-User-ID")
-	for _, file := range uploadFiles {
-		wg.Add(1)
-		go func(file *ghttp.UploadFile) {
-			defer wg.Done()
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-			resultCh <- volcengine.ProcessFileUpload(ctx, volcengine.NewHttpUploadSource(file), userID)
-		}(file)
+	uploadDir := g.Cfg().MustGet(ctx, "meeting.record.dir", "/app/uploads").String()
+
+	// 创建存储目录
+	fileDir := filepath.Join(uploadDir, time.Now().Format("2006_01_02"), gctx.CtxId(ctx))
+	if err := os.MkdirAll(fileDir, 0o755); err != nil {
+		return nil, gerror.Wrap(err, "创建上传目录失败")
 	}
 
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-
-	// 收集处理结果
 	var successTaskMetas []v1.TaskMeta
 	var errorFiles []v1.FileError
 
-	for result := range resultCh {
-		if result.Error != nil {
+	// 处理每个文件：保存到本地 → 创建 pending 记录 → 提交到队列
+	// 文件上传时：
+	// - 保存的目录：Trace ID
+	// - 文件名：文件索引-文件名。文件索引是 0,1,2,...
+	// - requestID：Trace ID-文件索引
+	// - TOS Object Key: Trace ID-文件索引/文件名
+	for id, file := range uploadFiles {
+		requestID := fmt.Sprintf("%s-%d", gctx.CtxId(ctx), id)
+		fileName := fmt.Sprintf("%d-%s", id, file.Filename)
+
+		// 1. 保存文件到本地（file.Save 的第一个参数是目录路径）
+		savedFileName, err := file.Save(fileDir, true)
+		if err != nil {
 			errorFiles = append(errorFiles, v1.FileError{
-				FileName: result.FileName,
-				Error:    result.Error.Error(),
+				FileName: fileName,
+				Error:    "保存文件失败: " + err.Error(),
 			})
-		} else {
-			successTaskMetas = append(successTaskMetas, result.TaskMeta)
+			continue
 		}
+
+		// 2. 重命名文件为我们期望的格式
+		savedPath := filepath.Join(fileDir, savedFileName)
+		localPath := filepath.Join(fileDir, fileName)
+		if err := os.Rename(savedPath, localPath); err != nil {
+			errorFiles = append(errorFiles, v1.FileError{
+				FileName: fileName,
+				Error:    "重命名文件失败: " + err.Error(),
+			})
+			_ = os.Remove(savedPath) // 清理临时文件
+			continue
+		}
+
+		// 2. 创建 pending 记录
+		if _, err := dao.Transcription.Ctx(ctx).Data(g.Map{
+			"request_id": requestID,
+			"owner":      userID,
+			"file_info": g.Map{
+				"object_key": fmt.Sprintf("%s/%s", requestID, fileName),
+				"filename":   file.Filename,
+				"file_type":  "Pending Inspection", // 待检测
+				"file_size":  file.Size,
+			},
+			"status": "pending",
+		}).Insert(); err != nil {
+			errorFiles = append(errorFiles, v1.FileError{
+				FileName: file.Filename,
+				Error:    "创建数据库记录失败: " + err.Error(),
+			})
+			// 创建数据库记录失败，删除已保存的文件（还未提交到队列）
+			_ = os.Remove(localPath)
+			continue
+		}
+
+		// 3. 提交到上传队列（异步处理）
+		// 注意：一旦提交到队列，文件就不能在这里删除了！
+		// uploadWorker 会在上传完成后自动删除文件
+		meetingRecordSvc.EnqueueUpload(ctx, &meetingRecordSvc.RecordingResult{
+			ConnectID: requestID,
+			Owner:     userID,
+			FilePath:  localPath,
+			Dir:       fileDir,
+			Size:      file.Size,
+			StartedAt: time.Now(),
+			EndedAt:   time.Now(),
+		})
+
+		// 4. 立即返回 TaskMeta（不等待上传完成）
+		successTaskMetas = append(successTaskMetas, v1.TaskMeta{
+			RequestId: requestID,
+			Owner:     userID,
+			Status:    "pending",
+			CreatedAt: nil,
+		})
 	}
 
 	return &v1.UploadFileRes{

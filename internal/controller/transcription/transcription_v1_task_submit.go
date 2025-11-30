@@ -7,6 +7,7 @@ import (
 	"doubao-speech-service/internal/consts"
 	"doubao-speech-service/internal/dao"
 	"doubao-speech-service/internal/service/transcription"
+	"doubao-speech-service/internal/service/volcengine"
 
 	"github.com/gogf/gf/v2/encoding/gjson"
 	"github.com/gogf/gf/v2/errors/gerror"
@@ -31,6 +32,10 @@ func (c *ControllerV1) TaskSubmit(ctx context.Context, req *v1.TaskSubmitReq) (r
 	}
 
 	// 构建提交给第三方API的请求
+	err = volcengine.UpdateFileURL(ctx, req.RequestId) // 先更新文件URL
+	if err != nil {
+		return nil, gerror.Wrap(err, "更新文件URL失败")
+	}
 	submitReq := struct {
 		Input struct {
 			Offline struct {

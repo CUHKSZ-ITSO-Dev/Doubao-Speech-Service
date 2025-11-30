@@ -44,14 +44,26 @@ func (c *ControllerV1) UploadFile(ctx context.Context, req *v1.UploadFileReq) (r
 	for id, file := range uploadFiles {
 		requestID := fmt.Sprintf("%s-%d", gctx.CtxId(ctx), id)
 		fileName := fmt.Sprintf("%d-%s", id, file.Filename)
-		localPath := filepath.Join(fileDir, fileName)
 
-		// 1. 保存文件到本地
-		if _, err := file.Save(localPath, true); err != nil {
+		// 1. 保存文件到本地（file.Save 的第一个参数是目录路径）
+		savedFileName, err := file.Save(fileDir, true)
+		if err != nil {
 			errorFiles = append(errorFiles, v1.FileError{
 				FileName: fileName,
 				Error:    "保存文件失败: " + err.Error(),
 			})
+			continue
+		}
+
+		// 2. 重命名文件为我们期望的格式
+		savedPath := filepath.Join(fileDir, savedFileName)
+		localPath := filepath.Join(fileDir, fileName)
+		if err := os.Rename(savedPath, localPath); err != nil {
+			errorFiles = append(errorFiles, v1.FileError{
+				FileName: fileName,
+				Error:    "重命名文件失败: " + err.Error(),
+			})
+			_ = os.Remove(savedPath) // 清理临时文件
 			continue
 		}
 

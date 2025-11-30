@@ -16,7 +16,7 @@ import (
 
 // 转换选项
 type ConvertOptions struct {
-	TargetFormat string   // e.g. "ogg", "mp3"
+	TargetFormat string   // e.g. "ogg", "mp3"。要求纯小写，前面不要点
 	AudioBitrate string   // e.g. "64k"
 	ExtraArgs    []string // appended raw ffmpeg arguments
 	DeleteInput  bool     // remove the source file after conversion
@@ -28,39 +28,51 @@ type FFmpegConverter struct {
 	opts    ConvertOptions
 }
 
-// 根据提供的 ffmpeg 路径和转换选项构建 FFmpegConverter
-func NewFFmpegConverter(binPath string, opts ConvertOptions) (*FFmpegConverter, error) {
-	format := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(opts.TargetFormat), "."))
-	if format == "" {
-		return nil, nil
-	}
-	opts.TargetFormat = format
-
-	if binPath == "" {
-		p, err := exec.LookPath("ffmpeg")
-		if err != nil {
-			return nil, fmt.Errorf("ffmpeg not found in PATH: %w", err)
-		}
-		binPath = p
-	}
-
+func NewConverter(binPath string, opts ConvertOptions) *FFmpegConverter {
 	return &FFmpegConverter{
 		binPath: binPath,
 		opts:    opts,
-	}, nil
+	}
 }
 
-// 使用 ffmpeg 将输入文件转换为目标格式
-func (c *FFmpegConverter) Convert(ctx context.Context, inputPath string) (string, error) {
-	if c == nil {
-		return inputPath, nil
-	}
+// 使用 ffmpeg 将输入文件转换为目标格式。根据文件的后缀名自动判断输入文件的格式，然后转换为目标格式。
+//
+// 参数:
+//   - inputPath: string - 输入文件的路径
+//   - extraArgs: g.Map - 转换的额外参数。原文件为 PCM 时需要提供一些参数。
+//
+// 返回:
+//   - outputPath: string - 输出文件的路径
+//   - err: error - 转换过程中发生的任何错误
+func (c *FFmpegConverter) Convert(ctx context.Context, inputPath string, extraArgs g.MapStrStr) (outputPath string, err error) {
 	if _, err := os.Stat(inputPath); err != nil {
-		return "", gerror.Wrap(err, "input file not accessible")
+		return "", gerror.Wrap(err, "输入文件不可访问")
 	}
 
 	target := fmt.Sprintf("%s.%s", strings.TrimSuffix(inputPath, filepath.Ext(inputPath)), c.opts.TargetFormat)
-	args := []string{"-y", "-i", inputPath, "-vn"}
+	args := []string{"-y"}
+	// 对于 PCM 原始音频流需要做特殊处理
+	if filepath.Ext(inputPath) == ".pcm" {
+		if sampleRate, ok := extraArgs["ar"]; ok {
+			args = append(args, "-ar", sampleRate)
+			delete(extraArgs, "ar")
+		} else {
+			return "", gerror.New("covert from PCM: sample rate is required")
+		}
+		if channels, ok := extraArgs["ac"]; ok {
+			args = append(args, "-ac", channels)
+			delete(extraArgs, "ac")
+		} else {
+			return "", gerror.New("covert from PCM: channels is required")
+		}
+		if format, ok := extraArgs["f"]; ok {
+			args = append(args, "-f", format)
+			delete(extraArgs, "f")
+		} else {
+			return "", gerror.New("covert from PCM: format is required")
+		}
+	}
+	args = append(args, "-i", inputPath, "-vn")
 	if c.opts.AudioBitrate != "" {
 		args = append(args, "-b:a", c.opts.AudioBitrate)
 	}

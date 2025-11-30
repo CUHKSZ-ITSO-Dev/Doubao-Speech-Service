@@ -14,6 +14,7 @@ import (
 
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
+	"github.com/gogf/gf/v2/os/gctx"
 )
 
 var (
@@ -27,22 +28,18 @@ func IsRecorderDisabled(err error) bool {
 
 // Recorder 按连接记录客户端发送的音频帧。
 type Recorder struct {
-	ctx       context.Context
-	connectID string
-
-	mu            sync.Mutex
-	file          *os.File
-	dir           string
-	filePath      string
-	wavPath       string
-	total         int64
-	closed        bool
-	maxBytes      int64
-	startTime     time.Time
-	sampleRate    int
-	bitsPerSample int
-	channels      int
-	converter     *media.FFmpegConverter
+	ctx           context.Context        // 每个请求都会开一个 Recorder，ctx 就是请求的 context
+	mu            sync.Mutex             // 互斥锁，保护文件操作
+	fileIO        *os.File               // 文件 IO 流，已打开，应该写入 PCM 音频流。当 fileIO == nil 时，说明文件已经被关闭且不该继续写入。
+	dir           string                 // /opts.Dir/2006_01_02/ctxId/
+	filePath      string                 // /opts.Dir/2006_01_02/ctxId/Meeting_2006_01_02_150405.pcm
+	total         int64                  // 当前文件的大小。会随着 Append 不断增加。
+	maxBytes      int64                  // 最大字节数
+	startTime     time.Time              // 开始时间
+	sampleRate    int                    // 采样率
+	bitsPerSample int                    // 位深度
+	channels      int                    // 通道数
+	converter     *media.FFmpegConverter // 转换器
 }
 
 // RecordingResult 提供录音文件的元数据，供上传流程使用。
@@ -56,7 +53,8 @@ type RecordingResult struct {
 	EndedAt   time.Time
 }
 
-func NewRecorder(ctx context.Context, connectID string) (*Recorder, error) {
+func NewRecorder(ctx context.Context) (*Recorder, error) {
+	ctxId := gctx.CtxId(ctx)
 	opts := getOptions()
 	if opts.Dir == "" {
 		return nil, ErrRecorderDisabled
@@ -64,24 +62,22 @@ func NewRecorder(ctx context.Context, connectID string) (*Recorder, error) {
 	now := time.Now()
 	formattedDate := now.Format("2006_01_02")
 	formattedTime := now.Format("2006_01_02_150405")
-	dir := filepath.Join(opts.Dir, formattedDate, connectID)
+
+	// 创建目录
+	dir := filepath.Join(opts.Dir, formattedDate, ctxId)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, gerror.Wrap(err, "创建目录失败")
 	}
-	fileName := "Meeting_" + formattedTime
-	path := filepath.Join(dir, fileName+".pcm")
-	file, err := os.Create(path)
-	if err != nil {
+	// 创建 PCM 文件
+	path := filepath.Join(dir, "Meeting_"+formattedTime+".pcm")
+	if _, err := os.Create(path); err != nil {
 		return nil, gerror.Wrap(err, "创建文件失败")
 	}
 
 	return &Recorder{
 		ctx:           ctx,
-		connectID:     connectID,
-		file:          file,
 		dir:           dir,
 		filePath:      path,
-		wavPath:       filepath.Join(dir, fileName+".wav"),
 		startTime:     now,
 		maxBytes:      opts.MaxBytes,
 		sampleRate:    opts.SampleRate,
@@ -91,31 +87,26 @@ func NewRecorder(ctx context.Context, connectID string) (*Recorder, error) {
 	}, nil
 }
 
-func (r *Recorder) ConnectID() string {
-	if r == nil {
-		return ""
-	}
-	return r.connectID
-}
-
 // Append 写入一帧音频。若超过限制或写入失败，会终止录制。
 func (r *Recorder) Append(frame []byte) error {
-	if r == nil {
-		return gerror.New("录音器被禁用")
-	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.closed || r.file == nil {
-		return gerror.New("录音器已关闭")
+	if r.fileIO == nil {
+		return gerror.New("文件流已经关闭，不能够继续写入音频帧。")
 	}
-	if r.maxBytes > 0 && r.total+int64(len(frame)) > r.maxBytes {
-		r.closeLocked()
-		return gerror.New("录音器已关闭")
+	if r.total+int64(len(frame)) > r.maxBytes {
+		if err := r.fileIO.Close(); err != nil {
+			g.Log().Errorf(r.ctx, "超过最大字节数限制，拒绝继续写入，强制关闭文件。但是关闭文件流时发生失败。%v", err)
+			return gerror.Wrap(err, "超过最大字节数限制，拒绝继续写入，强制关闭文件。但是关闭文件流时发生失败。")
+		}
+		r.fileIO = nil
+		g.Log().Errorf(r.ctx, "超过最大字节数限制，拒绝继续写入，强制关闭文件。")
+		return gerror.New("超过最大字节数限制，拒绝继续写入，强制关闭文件。")
 	}
-	n, err := r.file.Write(frame)
+	n, err := r.fileIO.Write(frame)
 	if err != nil {
-		r.closeLocked()
-		return gerror.Wrap(err, "写入文件失败")
+		g.Log().Errorf(r.ctx, "追加音频流时发生错误。%v", err)
+		return gerror.Wrap(err, "追加音频流时发生错误。")
 	}
 	r.total += int64(n)
 	return nil
@@ -123,45 +114,37 @@ func (r *Recorder) Append(frame []byte) error {
 
 // Finalize 结束录制。返回 nil 表示没有有效数据。
 func (r *Recorder) Finalize() (*RecordingResult, error) {
-	if r == nil {
-		return nil, nil
-	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.file != nil {
-		if err := r.file.Close(); err != nil {
+	if r.fileIO != nil {
+		if err := r.fileIO.Close(); err != nil {
 			return nil, gerror.Wrap(err, "关闭文件失败")
 		}
-		r.file = nil
+		r.fileIO = nil
 	}
-	r.closed = true
 	if r.total == 0 {
-		_ = os.Remove(r.filePath)
+		if err := os.Remove(r.filePath); err != nil {
+			g.Log().Errorf(r.ctx, "关闭文件流后，因为总大小为 0，删除文件。但是删除文件失败。%v", err)
+			return nil, gerror.Wrap(err, "关闭文件流后，因为总大小为 0，删除文件。但是删除文件失败。")
+		}
+		g.Log().Info(r.ctx, "关闭文件流后，因为总大小为 0，删除文件。")
 		return nil, nil
 	}
-	if err := r.flushToWAV(); err != nil {
-		return nil, gerror.Wrap(err, "刷新到WAV文件失败")
-	}
 
-	finalPath := r.wavPath
-	if r.converter != nil {
-		// 提交转换任务到队列，等待结果
-		resultCh := submitConvertTask(r.ctx, r.wavPath)
-		result := <-resultCh
-		if result.err != nil {
-			return nil, gerror.Wrap(result.err, "转换文件失败")
-		}
-		finalPath = result.path
+	// TODO: convertResult 的文件路径好像没有什么用
+	if convertResult := submitConvertTask(r); convertResult.err != nil {
+		return nil, gerror.Wrap(convertResult.err, "转换文件失败")
 	}
-	info, err := os.Stat(finalPath)
+	// submitConvertTask 之后 r.filePath 已经被更新为转换后的文件路径。
+	info, err := os.Stat(r.filePath)
 	if err != nil {
-		g.Log().Criticalf(r.ctx, "获取转换后的文件信息失败: %v。原始地址：%s。目标地址：%s。", err, r.wavPath, finalPath)
-		return nil, gerror.Wrap(err, "获取文件信息失败")
+		g.Log().Criticalf(r.ctx, "获取转换后的文件信息失败: %v。文件地址：%s。", err, r.filePath)
+		return nil, gerror.Wrap(err, "获取转换后的文件信息失败")
 	}
 
 	return &RecordingResult{
-		ConnectID: r.connectID,
-		FilePath:  finalPath,
+		ConnectID: gctx.CtxId(r.ctx),
+		FilePath:  r.filePath,
 		Dir:       r.dir,
 		Size:      info.Size(),
 		StartedAt: r.startTime,
@@ -170,55 +153,19 @@ func (r *Recorder) Finalize() (*RecordingResult, error) {
 }
 
 // Discard 关闭并删除当前录音。
+// 备注：现在暂时没有用到这个功能。
 func (r *Recorder) Discard() {
-	if r == nil {
-		return
-	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.closeLocked()
+	if err := r.fileIO.Close(); err != nil {
+		g.Log().Errorf(r.ctx, "关闭文件流时发生错误。%v", err)
+	}
+	r.fileIO = nil
 	if r.filePath != "" {
-		_ = os.Remove(r.filePath)
+		if err := os.Remove(r.filePath); err != nil {
+			g.Log().Errorf(r.ctx, "删除文件时发生错误。%v", err)
+		}
 	}
-}
-
-func (r *Recorder) closeLocked() {
-	if r.closed {
-		return
-	}
-	if r.file != nil {
-		_ = r.file.Close()
-		r.file = nil
-	}
-	r.closed = true
-}
-
-func (r *Recorder) flushToWAV() error {
-	src, err := os.Open(r.filePath)
-	if err != nil {
-		return gerror.Wrap(err, "打开源文件失败")
-	}
-	defer src.Close()
-
-	dst, err := os.Create(r.wavPath)
-	if err != nil {
-		return gerror.Wrap(err, "创建目标文件失败")
-	}
-
-	if err := writeWAVHeader(dst, r.channels, r.sampleRate, r.bitsPerSample, r.total); err != nil {
-		dst.Close()
-		return gerror.Wrap(err, "写入WAV头失败")
-	}
-
-	if _, err := io.Copy(dst, src); err != nil {
-		dst.Close()
-		return gerror.Wrap(err, "写入WAV数据失败")
-	}
-
-	if err := dst.Close(); err != nil {
-		return gerror.Wrap(err, "关闭目标文件失败")
-	}
-	return os.Remove(r.filePath)
 }
 
 func writeWAVHeader(w io.Writer, channels, sampleRate, bitsPerSample int, dataSize int64) error {
@@ -256,4 +203,33 @@ func writeWAVHeader(w io.Writer, channels, sampleRate, bitsPerSample int, dataSi
 	}
 
 	return binary.Write(w, binary.LittleEndian, header)
+}
+
+func (r *Recorder) convertToWAV() error {
+	// 打开源文件和目标文件
+	src, err := os.Open(r.filePath)
+	defer func() { _ = src.Close() }()
+	if err != nil {
+		return gerror.Wrap(err, "打开源文件失败")
+	}
+	dst, err := os.Create(r.filePath + ".wav")
+	defer func() { _ = dst.Close() }()
+	if err != nil {
+		return gerror.Wrap(err, "创建目标文件失败")
+	}
+
+	// PCM -> WAV
+	if err := writeWAVHeader(dst, r.channels, r.sampleRate, r.bitsPerSample, r.total); err != nil {
+		return gerror.Wrap(err, "写入WAV头失败")
+	}
+	if _, err := io.Copy(dst, src); err != nil {
+		return gerror.Wrap(err, "写入WAV数据失败")
+	}
+
+	if err := os.Remove(r.filePath); err != nil {
+		return gerror.Wrap(err, "删除源文件失败")
+	}
+	// 把新文件的名字更新进去
+	r.filePath = dst.Name()
+	return nil
 }

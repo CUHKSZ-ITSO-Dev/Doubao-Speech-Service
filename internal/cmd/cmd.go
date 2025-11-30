@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
 	"github.com/gogf/gf/v2/os/gcmd"
-	"github.com/gogf/gf/v2/os/gctx"
 	"github.com/gorilla/websocket"
 
 	"doubao-speech-service/internal/controller/transcription"
@@ -40,7 +40,7 @@ var (
 			s.SetClientMaxBodySize(1024 * 1024 * 1024)
 			s.Use(middlewares.BrotliMiddleware)
 			s.Use(ghttp.MiddlewareCORS)
-			s = setupWebSocketHandler(ctx, s)
+			s = setupWebSocketHandler(s)
 			oai := s.GetOpenApi()
 			oai.Config.CommonResponse = ghttp.DefaultHandlerResponse{}
 			oai.Config.CommonResponseDataField = "Data"
@@ -62,7 +62,7 @@ var (
 	}
 )
 
-func setupWebSocketHandler(ctx context.Context, s *ghttp.Server) *ghttp.Server {
+func setupWebSocketHandler(s *ghttp.Server) *ghttp.Server {
 	var (
 		wsUpGrader = websocket.Upgrader{
 			// TODO: 同源检查
@@ -82,8 +82,8 @@ func setupWebSocketHandler(ctx context.Context, s *ghttp.Server) *ghttp.Server {
 	}
 
 	s.BindHandler("/doubao-speech-service/ws", func(r *ghttp.Request) {
+		ctx := r.Context()
 		// Upgrade HTTP connection to WebSocket
-		traceID := gctx.CtxId(ctx)
 		userID := r.Header.Get("X-User-ID")
 
 		if userID == "" {
@@ -95,13 +95,7 @@ func setupWebSocketHandler(ctx context.Context, s *ghttp.Server) *ghttp.Server {
 			return
 		}
 
-		sessionID := r.Session.MustId()
-		protocol := "http"
-		if r.TLS != nil {
-			protocol = "https"
-		}
-		g.Log().Infof(ctx, `[微服务-请求] request=%+v url=%s session=%s user=%s remote=%s ua=%s protocol=%s`, r.Request, r.URL.String(), sessionID, userID, r.RemoteAddr, r.Header.Get("User-Agent"), protocol)
-
+		// 处理 WebSocket 升级
 		clientConn, err := wsUpGrader.Upgrade(r.Response.Writer, r.Request, nil)
 		if err != nil {
 			r.Response.Write(err.Error())
@@ -149,84 +143,98 @@ func setupWebSocketHandler(ctx context.Context, s *ghttp.Server) *ghttp.Server {
 			logID = resp.Header.Get("X-Tt-Logid")
 		}
 		if logID != "" {
-			g.Log().Infof(ctx, "火山引擎连接已建立，connect_id=%s, logid=%s", traceID, logID)
+			g.Log().Infof(ctx, "火山引擎连接已建立，logid=%s", logID)
 		} else {
-			g.Log().Infof(ctx, "火山引擎连接已建立，connect_id=%s", traceID)
+			g.Log().Infof(ctx, "火山引擎连接已建立，未返回 logID")
 		}
 
-		recorder, err := meetingRecordSvc.NewRecorder(ctx, traceID)
+		// 初始化录音机
+		recorder, err := meetingRecordSvc.NewRecorder(ctx)
 		if err != nil && !meetingRecordSvc.IsRecorderDisabled(err) {
-			g.Log().Warningf(ctx, "录音初始化失败，connect_id=%s: %v", traceID, err)
+			g.Log().Error(ctx, gerror.Wrap(err, "录音初始化失败"))
+			_ = clientConn.WriteControl(
+				websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "录音器初始化失败"),
+				time.Now().Add(time.Second),
+			)
+			return
 		}
 
-		errCh := make(chan error, 2)
-		taskCompleteCh := make(chan *meetingRecordSvc.RecordingResult, 1)       // for upload enqueue
-		taskCompleteNotifyCh := make(chan *meetingRecordSvc.RecordingResult, 1) // for websocket task-complete notification
+		// 两个 WebSocket Proxy 启动。同时启动录音完成善后处理 goroutine。
+		// 因为善后处理完成之后，需要给 client 发送 task-complete 消息。
+		// 因此善后处理完成后才会开始关闭两个 WebSocket Proxy。
+		errCh := make(chan *meetingRecordSvc.WsErrorMessage, 2)
+		taskCompleteCh := make(chan *meetingRecordSvc.RecordingResult, 1)
+		taskCompleteNotifyCh := make(chan *meetingRecordSvc.RecordingResult, 1)
 		serverFinalReceivedCh := make(chan struct{}, 1)
+		go meetingRecordSvc.ProxyWebSocket(ctx, "client -> bytedance", clientConn, upstreamConn, recorder, errCh, nil, nil)
+		go meetingRecordSvc.ProxyWebSocket(ctx, "bytedance -> client", upstreamConn, clientConn, nil, errCh, taskCompleteNotifyCh, serverFinalReceivedCh)
+		go handleFinalize(ctx, recorder, taskCompleteCh, taskCompleteNotifyCh, serverFinalReceivedCh)
 
-		// 启动处理录音的 goroutine
-		go func() {
-			defer close(taskCompleteCh)
-			defer close(taskCompleteNotifyCh)
-			// 等待服务器最终消息
-			<-serverFinalReceivedCh
-
-			if recorder != nil {
-				g.Log().Infof(ctx, "开始处理录音，connect_id=%s", traceID)
-				if result, err := recorder.Finalize(); err != nil {
-					g.Log().Warningf(ctx, "录音收尾失败，connect_id=%s: %v", traceID, err)
-				} else if result != nil {
-					g.Log().Infof(ctx, "录音处理完成，connect_id=%s, bytes=%d", traceID, result.Size)
-					result.Owner = userID
-					// 将录音结果加入上传队列
-					select {
-					case taskCompleteCh <- result:
-					default:
-					}
-					select {
-					case taskCompleteNotifyCh <- result:
-					default:
-					}
-				}
-			}
-		}()
-
-		go meetingRecordSvc.ProxyWebSocket(ctx, "client", clientConn, upstreamConn, recorder, errCh, taskCompleteNotifyCh, clientConn, nil)
-		go meetingRecordSvc.ProxyWebSocket(ctx, "upstream", upstreamConn, clientConn, nil, errCh, nil, nil, serverFinalReceivedCh)
-
-		g.Log().Infof(ctx, "开始会话")
-
-		firstErr := <-errCh
-		secondErr := <-errCh
-		_ = clientConn.Close()
-		_ = upstreamConn.Close()
-
-		if !isNormalClosure(firstErr) {
-			g.Log().Warningf(ctx, "WebSocket 转发通道异常关闭 (first): %v", firstErr)
+		// 阻塞，等待错误消息。
+		hasError := false
+		if errMsg := <-errCh; !isNormalClosure(errMsg.Err) {
+			g.Log().Warning(ctx, gerror.Wrapf(errMsg.Err, "WebSocket 转发通道异常关闭: %s", errMsg.Source))
+			hasError = true
 		}
-		if !isNormalClosure(secondErr) {
-			g.Log().Warningf(ctx, "WebSocket 转发通道异常关闭 (second): %v", secondErr)
+		if errMsg := <-errCh; !isNormalClosure(errMsg.Err) {
+			g.Log().Warning(ctx, gerror.Wrapf(errMsg.Err, "WebSocket 转发通道异常关闭: %s", errMsg.Source))
+			hasError = true
+		}
+		if hasError {
+			_ = clientConn.WriteControl(
+				websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "WebSocket 双向转发通道发生异常错误"),
+				time.Now().Add(time.Second),
+			)
+			g.Log().Error(ctx, "WebSocket 转发通道返回错误，录音过程发生了错误。请参考上方 Warning 警告 “WebSocket 转发通道异常关闭” 的报错信息。")
+			return
 		}
 
-		// 如果有任务完成的结果，加入上传队列
-		select {
-		case result, ok := <-taskCompleteCh:
-			if ok && result != nil {
-				g.Log().Infof(ctx, "将录音加入上传队列，connect_id=%s", traceID)
-				meetingRecordSvc.EnqueueUpload(ctx, result)
-			}
-		default:
-			// 没有任务完成，可能是非录音场景
+		// 阻塞，等待善后工作完成
+		// taskCompleteCh 由 handleFinalize 填充，handleFinalize 完成之后，会关闭 taskCompleteCh
+		// 所以如果 taskCompleteCh 有消息了，说明转换什么的都好了。
+		if result := <-taskCompleteCh; result.ConnectID != "-1" {
+			g.Log().Infof(ctx, "将录音加入上传队列")
+			meetingRecordSvc.EnqueueUpload(ctx, result)
+		} else {
+			g.Log().Errorf(ctx, "音频善后 Finalize 失败：%s", result.FilePath)
 		}
-
-		g.Log().Infof(ctx, "WebSocket 转发完成，connect_id=%s", traceID)
 	})
 
-	// // Configure static file serving
-	// s.SetServerRoot("static")
 	return s
 }
 
 func isNormalClosure(err error) bool {
 	return websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseNoStatusReceived, websocket.CloseGoingAway)
+}
+
+func handleFinalize(ctx context.Context, recorder *meetingRecordSvc.Recorder, taskCompleteCh chan *meetingRecordSvc.RecordingResult, taskCompleteNotifyCh chan *meetingRecordSvc.RecordingResult, serverFinalReceivedCh chan struct{}) {
+	defer close(taskCompleteCh)
+	defer close(taskCompleteNotifyCh)
+	<-serverFinalReceivedCh
+
+	g.Log().Infof(ctx, "开始处理录音")
+	if result, err := recorder.Finalize(); err != nil {
+		g.Log().Error(ctx, gerror.Wrap(err, "录音收尾失败"))
+		// 临时用 RecordingResult 的这三个参数传递错误信息
+		taskCompleteCh <- &meetingRecordSvc.RecordingResult{
+			ConnectID: "-1",
+			Owner:     g.RequestFromCtx(ctx).Header.Get("X-User-ID"),
+			FilePath:  "Error: " + err.Error(),
+		}
+	} else if result != nil {
+		g.Log().Infof(ctx, "录音处理完成，bytes=%d", result.Size)
+		result.Owner = g.RequestFromCtx(ctx).Header.Get("X-User-ID")
+		// TODO： taskCompleteNotifych 什么时候发
+		taskCompleteCh <- result
+		taskCompleteNotifyCh <- result
+	} else {
+		g.Log().Error(ctx, "录音处理完成，但没有结果 result == nil")
+		taskCompleteCh <- &meetingRecordSvc.RecordingResult{
+			ConnectID: "-1",
+			Owner:     g.RequestFromCtx(ctx).Header.Get("X-User-ID"),
+			FilePath:  "Error: 录音处理完成，但没有结果 result == nil",
+		}
+	}
 }

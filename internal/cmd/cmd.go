@@ -186,15 +186,15 @@ func setupWebSocketHandler(ctx context.Context, s *ghttp.Server) *ghttp.Server {
 			}
 		}()
 
-		go meetingRecordSvc.ProxyWebSocket(ctx, "client", clientConn, upstreamConn, recorder, errCh, taskCompleteCh, nil)
-		go meetingRecordSvc.ProxyWebSocket(ctx, "upstream", upstreamConn, clientConn, nil, errCh, nil, serverFinalReceivedCh)
+		go meetingRecordSvc.ProxyWebSocket(ctx, "client", clientConn, upstreamConn, recorder, errCh, taskCompleteCh, clientConn, nil)
+		go meetingRecordSvc.ProxyWebSocket(ctx, "upstream", upstreamConn, clientConn, nil, errCh, nil, nil, serverFinalReceivedCh)
 
 		g.Log().Infof(ctx, "开始会话")
 
 		firstErr := <-errCh
+		secondErr := <-errCh
 		_ = clientConn.Close()
 		_ = upstreamConn.Close()
-		secondErr := <-errCh
 
 		if !isNormalClosure(firstErr) {
 			g.Log().Warningf(ctx, "WebSocket 转发通道异常关闭 (first): %v", firstErr)

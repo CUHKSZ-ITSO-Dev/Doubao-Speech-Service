@@ -57,6 +57,7 @@ func NewRecorder(ctx context.Context) (*Recorder, error) {
 	ctxId := gctx.CtxId(ctx)
 	opts := getOptions()
 	if opts.Dir == "" {
+		g.Log().Error(ctx, "录音目录未配置，录音功能被禁用")
 		return nil, ErrRecorderDisabled
 	}
 	now := time.Now()
@@ -66,16 +67,21 @@ func NewRecorder(ctx context.Context) (*Recorder, error) {
 	// 创建目录
 	dir := filepath.Join(opts.Dir, formattedDate, ctxId)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
+		g.Log().Errorf(ctx, "创建录音目录失败: %v", err)
 		return nil, gerror.Wrap(err, "创建目录失败")
 	}
 	// 创建 PCM 文件
 	path := filepath.Join(dir, "Meeting_"+formattedTime+".pcm")
-	if _, err := os.Create(path); err != nil {
+	file, err := os.Create(path)
+	if err != nil {
+		g.Log().Errorf(ctx, "创建录音文件失败: %v", err)
 		return nil, gerror.Wrap(err, "创建文件失败")
 	}
 
+	g.Log().Infof(ctx, "录音器已创建，文件路径: %s", path)
 	return &Recorder{
 		ctx:           ctx,
+		fileIO:        file,
 		dir:           dir,
 		filePath:      path,
 		startTime:     now,
@@ -92,6 +98,7 @@ func (r *Recorder) Append(frame []byte) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.fileIO == nil {
+		g.Log().Warningf(r.ctx, "文件流已经关闭，不能够继续写入音频帧。")
 		return gerror.New("文件流已经关闭，不能够继续写入音频帧。")
 	}
 	if r.total+int64(len(frame)) > r.maxBytes {
@@ -114,12 +121,15 @@ func (r *Recorder) Append(frame []byte) error {
 
 // Finalize 结束录制。返回 nil 表示没有有效数据。
 func (r *Recorder) Finalize() (*RecordingResult, error) {
+	g.Log().Infof(r.ctx, "开始 Finalize 录音，当前已写入 %d bytes", r.total)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.fileIO != nil {
 		if err := r.fileIO.Close(); err != nil {
+			g.Log().Errorf(r.ctx, "关闭文件失败: %v", err)
 			return nil, gerror.Wrap(err, "关闭文件失败")
 		}
+		g.Log().Infof(r.ctx, "文件流已关闭")
 		r.fileIO = nil
 	}
 	if r.total == 0 {
@@ -127,14 +137,15 @@ func (r *Recorder) Finalize() (*RecordingResult, error) {
 			g.Log().Errorf(r.ctx, "关闭文件流后，因为总大小为 0，删除文件。但是删除文件失败。%v", err)
 			return nil, gerror.Wrap(err, "关闭文件流后，因为总大小为 0，删除文件。但是删除文件失败。")
 		}
-		g.Log().Info(r.ctx, "关闭文件流后，因为总大小为 0，删除文件。")
+		g.Log().Warningf(r.ctx, "关闭文件流后，因为总大小为 0，删除文件。返回 nil")
 		return nil, nil
 	}
 
-	// TODO: convertResult 的文件路径好像没有什么用
+	g.Log().Infof(r.ctx, "开始提交转换任务，文件: %s", r.filePath)
 	if convertResult := submitConvertTask(r); convertResult.err != nil {
-		return nil, gerror.Wrap(convertResult.err, "转换文件失败")
+		return nil, convertResult.err
 	}
+	g.Log().Infof(r.ctx, "转换任务完成，转换后文件: %s", r.filePath)
 	// submitConvertTask 之后 r.filePath 已经被更新为转换后的文件路径。
 	info, err := os.Stat(r.filePath)
 	if err != nil {
@@ -142,14 +153,16 @@ func (r *Recorder) Finalize() (*RecordingResult, error) {
 		return nil, gerror.Wrap(err, "获取转换后的文件信息失败")
 	}
 
-	return &RecordingResult{
+	result := &RecordingResult{
 		ConnectID: gctx.CtxId(r.ctx),
 		FilePath:  r.filePath,
 		Dir:       r.dir,
 		Size:      info.Size(),
 		StartedAt: r.startTime,
 		EndedAt:   time.Now(),
-	}, nil
+	}
+	g.Log().Infof(r.ctx, "Finalize 完成，最终文件大小: %d bytes", result.Size)
+	return result, nil
 }
 
 // Discard 关闭并删除当前录音。

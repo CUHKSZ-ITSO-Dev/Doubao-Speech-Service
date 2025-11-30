@@ -14,7 +14,7 @@ import (
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
-	"github.com/google/uuid"
+	"github.com/gogf/gf/v2/os/gctx"
 	"github.com/volcengine/ve-tos-golang-sdk/v2/tos"
 	"github.com/volcengine/ve-tos-golang-sdk/v2/tos/enum"
 )
@@ -33,7 +33,9 @@ type UploadSource interface {
 }
 
 // ProcessFileUpload 处理单个文件的上传
-func ProcessFileUpload(ctx context.Context, file UploadSource, upn string) FileUploadResult {
+// requestID 为可选参数，如果提供则使用该 ID，否则生成新的 ID
+// 如果记录已存在则更新，否则插入新记录
+func ProcessFileUpload(ctx context.Context, file UploadSource, upn string, requestID ...string) FileUploadResult {
 	result := FileUploadResult{
 		FileName: file.FileName(),
 	}
@@ -68,20 +70,32 @@ func ProcessFileUpload(ctx context.Context, file UploadSource, upn string) FileU
 		return result
 	}
 
-	// 文件校验成功，进入 pending 状态
-	fileID := uuid.New().String()
+	// 确定使用的 fileID：如果提供了 requestID 则使用，否则使用 traceID
+	var fileID string
+	if len(requestID) > 0 && requestID[0] != "" {
+		fileID = requestID[0]
+	} else {
+		fileID = gctx.CtxId(ctx)
+	}
+
+	// 检查记录是否存在
+	var existingRecord entity.Transcription
+	err = dao.Transcription.Ctx(ctx).Where("request_id = ?", fileID).Limit(1).Scan(&existingRecord)
+	if err != nil || existingRecord.RequestId == "" {
+		result.Error = gerror.Newf("数据库记录不存在，requestID=%s，请先创建 pending 记录", fileID)
+		return result
+	}
+
+	// 更新 file_type（通过 mimetype 检测得到的真实类型）
 	if _, err := dao.Transcription.Ctx(ctx).Data(g.Map{
-		"request_id": fileID,
-		"owner":      upn,
 		"file_info": g.Map{
 			"object_key": fileID + "/" + file.FileName(),
 			"filename":   file.FileName(),
-			"file_type":  mType.Extension(),
+			"file_type":  mType.Extension(), // 通过 mimetype 检测的真实类型
 			"file_size":  file.FileSize(),
 		},
-		"status": "pending",
-	}).Insert(); err != nil {
-		result.Error = gerror.Wrap(err, "数据库新建记录失败")
+	}).Where("request_id = ?", fileID).Update(); err != nil {
+		result.Error = gerror.Wrap(err, "更新数据库文件类型失败")
 		return result
 	}
 

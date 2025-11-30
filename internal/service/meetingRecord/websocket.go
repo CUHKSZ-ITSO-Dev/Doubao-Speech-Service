@@ -7,8 +7,12 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
 
+	"doubao-speech-service/internal/dao"
+
+	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gorilla/websocket"
 )
@@ -27,7 +31,7 @@ func ProxyWebSocket(
 	taskCompleteNotifyCh <-chan *RecordingResult,
 	serverFinalReceivedCh chan<- struct{}) {
 
-	recorderActive := recorder != nil && srcName == "client"
+	recorderActive := recorder != nil && srcName == "client -> bytedance"
 	taskCompleteSent := false // 标记是否已发送任务完成消息
 	// Proxy 关闭时自动处理 errCh 通道。
 	var finalErr error
@@ -43,30 +47,49 @@ func ProxyWebSocket(
 		}
 	}()
 	for {
-		// 非阻塞地检查是否有任务完成通知
-		if taskCompleteNotifyCh != nil && !taskCompleteSent {
-			select {
-			case result, ok := <-taskCompleteNotifyCh:
-				if ok && result != nil {
-					if err := sendTaskCompleteMessage(ctx, dst, result); err != nil {
-						g.Log().Warningf(ctx, "发送任务完成消息失败: %v", err)
-					} else {
-						g.Log().Infof(ctx, "任务完成消息已发送，等待客户端ACK确认...")
-						taskCompleteSent = true
-					}
-				}
-			default:
-				// 没有任务收尾转换完成事件，继续正常读取
-			}
+		msgType, msg, err := src.ReadMessage()
+
+		// 调试：记录接收到的消息
+		if msgType == websocket.BinaryMessage && srcName == "client -> bytedance" {
+			g.Log().Debugf(ctx, "%s 收到二进制消息，长度: %d bytes, recorderActive=%v", srcName, len(msg), recorderActive)
 		}
 
-		msgType, msg, err := src.ReadMessage()
 		if err != nil {
 			finalErr = err
 			if closeErr, ok := err.(*websocket.CloseError); ok {
 				g.Log().Infof(ctx, "%s 连接关闭，code=%d, text=%s", srcName, closeErr.Code, closeErr.Text)
+
+				// 特殊处理：bytedance -> client 收到服务器正常关闭时，需要等待发送 taskComplete 消息
+				if srcName == "bytedance -> client" && closeErr.Code == websocket.CloseNormalClosure && taskCompleteNotifyCh != nil && !taskCompleteSent {
+					g.Log().Infof(ctx, "服务器已关闭连接，等待录音处理完成以发送任务完成消息...")
+					// 等待 taskComplete 消息，不设超时，由 context 控制生命周期
+					select {
+					case result, ok := <-taskCompleteNotifyCh:
+						if ok && result != nil {
+							// 在发送 0xa 消息之前，先创建数据库 pending 记录
+							if err := createPendingRecord(ctx, result); err != nil {
+								g.Log().Warningf(ctx, "创建数据库 pending 记录失败: %v", err)
+							} else {
+								g.Log().Infof(ctx, "已创建数据库 pending 记录，requestID=%s", result.ConnectID)
+							}
+
+							if err := sendTaskCompleteMessage(ctx, dst, result); err != nil {
+								g.Log().Warningf(ctx, "发送任务完成消息失败: %v", err)
+							} else {
+								g.Log().Infof(ctx, "任务完成消息已发送，等待客户端ACK确认...")
+								taskCompleteSent = true
+								// 继续循环，等待客户端 ACK
+								continue
+							}
+						}
+						// 如果 channel 关闭或收到 nil，继续正常退出流程
+					case <-ctx.Done():
+						g.Log().Warningf(ctx, "上下文取消，无法等待任务完成消息")
+					}
+				}
+
 				// 避免在上游正常关闭时抢先给客户端发 close，导致后续任务完成消息无法发送。
-				if srcName != "upstream" || closeErr.Code != websocket.CloseNormalClosure {
+				if srcName != "bytedance -> client" || closeErr.Code != websocket.CloseNormalClosure {
 					_ = dst.WriteControl(
 						websocket.CloseMessage,
 						websocket.FormatCloseMessage(closeErr.Code, closeErr.Text),
@@ -76,7 +99,7 @@ func ProxyWebSocket(
 				finalErr = closeErr
 			} else if errors.Is(err, io.EOF) {
 				g.Log().Infof(ctx, "%s 连接已结束", srcName)
-				if srcName != "upstream" {
+				if srcName != "bytedance -> client" {
 					_ = dst.WriteControl(
 						websocket.CloseMessage,
 						websocket.FormatCloseMessage(websocket.CloseNormalClosure, "EOF"),
@@ -102,7 +125,7 @@ func ProxyWebSocket(
 		}
 
 		// 检测客户端 ACK 消息
-		if srcName == "client" && msgType == websocket.BinaryMessage {
+		if srcName == "client -> bytedance" && msgType == websocket.BinaryMessage {
 			if frame, err := parseSAUCFrame(msg); err == nil {
 				if frame.header.MessageType == saucMsgTypeClientAck {
 					g.Log().Infof(ctx, "收到客户端ACK确认，准备关闭连接")
@@ -129,6 +152,7 @@ func ProxyWebSocket(
 				}
 			} else if handled {
 				// 帧已解析但无需写入（例如 full client request），直接跳过。
+				g.Log().Debugf(ctx, "%s 收到已处理的帧（无音频数据）", srcName)
 			} else {
 				g.Log().Debugf(ctx, "%s 收到非音频二进制帧，message_type 未处理", srcName)
 			}
@@ -141,7 +165,7 @@ func ProxyWebSocket(
 
 		// 如果这是服务器发来的带有 FINAL_PACKET 标志的消息
 		// 说明服务器已经发送了所有转写结果，可以开始处理录音文件了
-		if srcName == "upstream" && msgType == websocket.BinaryMessage && serverFinalReceivedCh != nil {
+		if srcName == "bytedance -> client" && msgType == websocket.BinaryMessage && serverFinalReceivedCh != nil {
 			if frame, err := parseSAUCFrame(msg); err == nil {
 				if frame.header.MessageType == saucMsgTypeFullServerResponse && (frame.header.Flags&messageFlagFinalPacket) == messageFlagFinalPacket {
 					g.Log().Infof(ctx, "服务器已发送最终转写结果，触发录音处理信号")
@@ -172,4 +196,41 @@ func sendTaskCompleteMessage(ctx context.Context, conn *websocket.Conn, result *
 
 	message := buildSAUCMessage(saucMsgTypeTaskComplete, saucSerializationJSON, saucCompressionNone, 0, payload)
 	return conn.WriteMessage(websocket.BinaryMessage, message)
+}
+
+// createPendingRecord 在实时录音完成后，向数据库写入 pending 记录
+// 这样前端可以立即查询到任务并开始轮询状态
+func createPendingRecord(ctx context.Context, result *RecordingResult) error {
+	if result == nil || result.ConnectID == "" {
+		return nil
+	}
+
+	// 检查记录是否已存在，避免重复插入
+	if count, err := dao.Transcription.Ctx(ctx).Where("request_id = ?", result.ConnectID).Count(); err != nil {
+		return gerror.Wrap(err, "查询数据库记录失败")
+	} else if count > 0 {
+		// 记录已存在，无需重复创建
+		g.Log().Infof(ctx, "数据库记录已存在，requestID=%s", result.ConnectID)
+		return nil
+	}
+
+	// 从文件路径提取文件名
+	filename := filepath.Base(result.FilePath)
+
+	// 创建 pending 状态的记录
+	// 注意：file_type 不在此处设置，因为需要通过 mimetype 检测真实类型，
+	// 将在 ProcessFileUpload 中检测并更新。
+	_, err := dao.Transcription.Ctx(ctx).Data(g.Map{
+		"request_id": result.ConnectID,
+		"owner":      result.Owner,
+		"file_info": g.Map{
+			"object_key": result.ConnectID + "/" + filename, // 预设 TOS 对象键
+			"filename":   filename,                          // 文件名
+			"file_type":  "Pending Inspection",              // 文件类型，将在 ProcessFileUpload 中检测并更新
+			"file_size":  result.Size,                       // 文件大小
+		},
+		"status": "pending",
+	}).Insert()
+
+	return err
 }

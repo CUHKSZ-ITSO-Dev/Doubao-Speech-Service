@@ -61,6 +61,8 @@ func (c *ControllerV1) GetTaskList(ctx context.Context, req *v1.GetTaskListReq) 
 		Scan(&res.TaskMetas); err != nil {
 		return nil, gerror.Wrap(err, "查询数据库失败")
 	}
-	res.Total, err = model.Count()
+	if res.Total, err = model.Count(); err != nil {
+		return nil, gerror.Wrap(err, "统计总记录数失败")
+	}
 	return res, nil
 }

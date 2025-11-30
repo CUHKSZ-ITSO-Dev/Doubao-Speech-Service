@@ -46,7 +46,7 @@ func init() {
 
 	tryFFMpeg, _ := exec.LookPath("ffmpeg")
 	options = recordOptions{
-		Dir:             g.Cfg().MustGet(ctx, "meeting.record.dir", "/app").String(),
+		Dir:             g.Cfg().MustGet(ctx, "meeting.record.dir", "/app/uploads").String(),
 		MaxBytes:        g.Cfg().MustGet(ctx, "meeting.record.maxBytes", 268435456).Int64(),
 		SampleRate:      g.Cfg().MustGet(ctx, "meeting.record.sampleRate", 16000).Int(),
 		Channels:        g.Cfg().MustGet(ctx, "meeting.record.channels", 1).Int(),
@@ -108,26 +108,33 @@ func startConvertWorkers(ctx context.Context, numWorkers int) {
 				case <-ctx.Done():
 					return
 				case task := <-convertQueue:
+					g.Log().Infof(task.recorder.ctx, "收到转换任务，文件: %s", task.recorder.filePath)
 					conv := getConverter()
 					if conv == nil {
 						// 说明关掉了 Converter，此时应该执行 wav 保存
+						g.Log().Infof(task.recorder.ctx, "转换器未启用，执行 PCM -> WAV 转换")
 						if err := task.recorder.convertToWAV(); err != nil {
+							g.Log().Errorf(task.recorder.ctx, "转换成WAV失败: %v", err)
 							task.resultCh <- convertResult{convertedPath: "", err: gerror.Wrap(err, "转换成WAV失败")}
 							continue
 						}
+						g.Log().Infof(task.recorder.ctx, "WAV 转换完成")
 						task.resultCh <- convertResult{convertedPath: task.recorder.filePath, err: nil}
 						continue
 					} else {
 						// 正常执行转换任务
+						g.Log().Infof(task.recorder.ctx, "开始 FFmpeg 转换，参数: f=s16le, ar=%d, ac=%d", task.recorder.sampleRate, task.recorder.channels)
 						convertedPath, err := conv.Convert(task.recorder.ctx, task.recorder.filePath, g.MapStrStr{
-							"ar": "s16le",
-							"ac": strconv.Itoa(task.recorder.sampleRate),
-							"f":  strconv.Itoa(task.recorder.channels),
+							"f":  "s16le",
+							"ar": strconv.Itoa(task.recorder.sampleRate),
+							"ac": strconv.Itoa(task.recorder.channels),
 						})
 						if err != nil {
-							task.resultCh <- convertResult{convertedPath: "", err: gerror.Wrap(err, "转换失败")}
+							g.Log().Errorf(task.recorder.ctx, "FFmpeg 转换失败: %v", err)
+							task.resultCh <- convertResult{convertedPath: "", err: err}
 							continue
 						}
+						g.Log().Infof(task.recorder.ctx, "FFmpeg 转换完成: %s", convertedPath)
 						task.recorder.filePath = convertedPath
 						task.resultCh <- convertResult{convertedPath: convertedPath, err: nil}
 					}
